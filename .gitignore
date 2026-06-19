@@ -1,0 +1,4 @@
+node_modules/
+server/leaddesk.db*
+server/public/
+client/dist/
