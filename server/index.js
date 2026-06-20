@@ -10,8 +10,7 @@ import tagsRouter from './routes/tags.js';
 import templatesRouter from './routes/templates.js';
 import jobsRouter from './routes/jobs.js';
 import settingsRouter from './routes/settings.js';
-import { initClient, getStatus, onStatusChange, sendMessage, checkPhones, destroyClient, onMessage } from './whatsapp.js';
-import chatRoutes from './routes/chats.js';
+import { initClient, getStatus, onStatusChange, destroyClient, logoutClient } from './whatsapp.js';
 
 import os from 'os';
 
@@ -35,8 +34,6 @@ app.use('/api/tags', tagsRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/settings', settingsRouter);
-app.use('/api/chats', chatRoutes(getDB));
-
 app.get('/api/stats', (req, res) => {
   const db = getDB();
 
@@ -64,6 +61,21 @@ app.get('/api/stats', (req, res) => {
     SELECT COUNT(*) as c FROM leads
     WHERE status = 'active' AND verified = 1 AND phone_valid = 1
     AND id NOT IN (SELECT lead_id FROM lead_tags)
+  `).get().c;
+
+  // Verified leads with no tags
+  const verifiedNoTags = db.prepare(`
+    SELECT COUNT(*) as c FROM leads
+    WHERE status = 'active' AND verified = 1
+    AND id NOT IN (SELECT lead_id FROM lead_tags)
+  `).get().c;
+
+  // Verified leads with no tags and no campaign
+  const verifiedNoTagsNoCampaign = db.prepare(`
+    SELECT COUNT(*) as c FROM leads
+    WHERE status = 'active' AND verified = 1
+    AND id NOT IN (SELECT lead_id FROM lead_tags)
+    AND id NOT IN (SELECT lead_id FROM campaign_leads)
   `).get().c;
 
   // Stage breakdown with verified/unverified
@@ -102,7 +114,7 @@ app.get('/api/stats', (req, res) => {
 
   res.json({
     total, verified, unverified, dead, invalidPhone, inCampaign,
-    hasMenu, readyForOutreach,
+    hasMenu, readyForOutreach, verifiedNoTags, verifiedNoTagsNoCampaign,
     verifiedPercent: total > 0 ? Math.round((verified / total) * 100) : 0,
     stageBreakdown,
     tagBreakdown,
@@ -222,116 +234,12 @@ io.on('connection', (socket) => {
     io.emit('wa_status', getStatus());
   });
 
-  // Send message to a single phone
-  socket.on('wa_send', async ({ phone, message, leadId }) => {
-    try {
-      await sendMessage(phone, message);
-      // Tag lead as "Messaged"
-      ensureTagAndAssign(leadId, 'Messaged', '#3d7a52');
-      socket.emit('wa_send_result', { phone, leadId, status: 'success' });
-    } catch (err) {
-      // Tag lead as "Not WhatsApp"
-      ensureTagAndAssign(leadId, 'Not WhatsApp', '#a13a3a');
-      socket.emit('wa_send_result', { phone, leadId, status: 'error', error: err.message });
-    }
-  });
-
-  // Check phones (for import)
-  socket.on('wa_check', async ({ phones }) => {
-    try {
-      const results = await checkPhones(phones);
-      socket.emit('wa_check_result', results);
-    } catch (err) {
-      socket.emit('wa_check_result', { error: err.message });
-    }
-  });
-
-  // Campaign broadcast
-  let activeBroadcast = null;
-
-  socket.on('wa_broadcast', async ({ leads, message, delay }) => {
-    const total = leads.length;
-    let sent = 0, failed = 0;
-    const minD = parseInt(delay?.min) || 1;
-    const maxD = parseInt(delay?.max) || 5;
-
-    activeBroadcast = { paused: false, stopped: false };
-
-    for (let i = 0; i < leads.length; i++) {
-      if (activeBroadcast?.stopped) break;
-
-      while (activeBroadcast?.paused) {
-        await new Promise(r => setTimeout(r, 1000));
-        if (activeBroadcast?.stopped) break;
-      }
-      if (activeBroadcast?.stopped) break;
-
-      const l = leads[i];
-      let phone;
-      try {
-        phone = (l.phone || '').replace(/\D/g, '');
-        if (!phone) throw new Error('No phone');
-        await sendMessage(phone, message);
-        ensureTagAndAssign(l.id, 'Messaged', '#3d7a52');
-        sent++;
-        socket.emit('wa_broadcast_progress', { current: i + 1, total, leadId: l.id, phone, status: 'success' });
-      } catch (err) {
-        ensureTagAndAssign(l.id, 'Not WhatsApp', '#a13a3a');
-        failed++;
-        socket.emit('wa_broadcast_progress', { current: i + 1, total, leadId: l.id, phone: phone || '', status: 'error', error: err.message });
-      }
-      if (i < leads.length - 1 && !activeBroadcast?.stopped) {
-        const waitMs = Math.floor(Math.random() * (maxD - minD + 1) + minD) * 1000;
-        socket.emit('wa_broadcast_progress', { current: i + 1, total, leadId: null, phone: '', status: 'cooldown', waitMs });
-        await new Promise(r => setTimeout(r, waitMs));
-      }
-    }
-
-    const completionMsg = activeBroadcast?.stopped ? 'Broadcast stopped.' : `Broadcast complete.`;
-    socket.emit('wa_broadcast_done', { sent, failed, total, stopped: !!activeBroadcast?.stopped });
-    activeBroadcast = null;
-  });
-
-  socket.on('wa_broadcast_pause', () => {
-    if (activeBroadcast) activeBroadcast.paused = true;
-  });
-
-  socket.on('wa_broadcast_resume', () => {
-    if (activeBroadcast) activeBroadcast.paused = false;
-  });
-
-  socket.on('wa_broadcast_stop', () => {
-    if (activeBroadcast) activeBroadcast.stopped = true;
+  // Logout WhatsApp (clear session data)
+  socket.on('wa_logout', async () => {
+    await logoutClient();
+    io.emit('wa_status', getStatus());
   });
 });
-
-// Incoming WhatsApp messages — store in DB + emit real-time
-onMessage((msg) => {
-  try {
-    const db = getDB();
-    const phone = msg.from.replace('@c.us', '');
-    const body = msg.body;
-    const lead = db.prepare('SELECT id FROM leads WHERE phone LIKE ? LIMIT 1').get(`%${phone}%`);
-    db.prepare('INSERT INTO chat_messages (lead_id, phone, direction, content, status, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(lead?.id || null, phone, 'in', body, 'received', Date.now());
-    io.emit('new_chat_message', { phone, content: body, leadId: lead?.id || null, direction: 'in' });
-  } catch (err) {
-    console.error('Chat message handler error:', err?.message || err);
-  }
-});
-
-function ensureTagAndAssign(leadId, tagName, tagColor) {
-  if (!leadId) return;
-  try {
-    const db = getDB();
-    let tag = db.prepare('SELECT id FROM tags WHERE name = ?').get(tagName);
-    if (!tag) {
-      const tagId = 'tag_' + Math.random().toString(36).slice(2, 10);
-      db.prepare('INSERT INTO tags (id, name, color, created_at) VALUES (?, ?, ?, ?)').run(tagId, tagName, tagColor, Date.now());
-      tag = { id: tagId };
-    }
-    db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)').run(leadId, tag.id);
-  } catch {}
-}
 
 // Serve static in production
 import { fileURLToPath } from 'url';

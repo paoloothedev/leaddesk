@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   MagnifyingGlass, Funnel, CheckCircle, XCircle, Trash,
-  ChatCircle, ArrowSquareOut, UserPlus, CaretRight
+  ArrowSquareOut, UserPlus, CaretRight
 } from '@phosphor-icons/react'
 import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign } from '../api'
 
@@ -27,7 +27,7 @@ const rowVariants = {
   })
 }
 
-export default function LeadsTable({ stages, tags, campaigns, refreshId, openLeadModal, showToast, refresh, goView, openChatWithLead }) {
+export default function LeadsTable({ stages, tags, campaigns, refreshId, openLeadModal, showToast, refresh, goView }) {
   const [leads, setLeads] = useState([])
   const [search, setSearch] = useState('')
   const [fVerified, setFVerified] = useState('')
@@ -344,10 +344,6 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                     <td className="py-3 px-4 text-xs text-zinc-500 dark:text-zinc-400 max-w-[90px] truncate">{(l.notes || '').slice(0, 40)}{(l.notes || '').length > 40 ? '...' : ''}</td>
                     <td className="py-3 px-4">
                       <div className="flex gap-1">
-                        <button onClick={() => openChatWithLead(l.phone, l.name)}
-                          className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.95]">
-                          <ChatCircle size={12} weight="fill" />
-                        </button>
                         {!l.verified && (
                           <button onClick={() => quickVerify(l.id)}
                             className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors active:scale-[0.95]">

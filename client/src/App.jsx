@@ -11,9 +11,9 @@ import CampaignModal from './components/CampaignModal'
 import Settings from './components/Settings'
 import Import from './components/Import'
 import LeadModal from './components/LeadModal'
-import ChatInbox from './components/ChatInbox'
 import Toast from './components/Toast'
-import { getStats, getStages, getTags, getCampaigns } from './api'
+import ClockWidget from './components/ClockWidget'
+import { getStats, getStages, getTags, getCampaigns, getSettings } from './api'
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -21,7 +21,7 @@ const pageVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 }
 
-const VIEWS = ['dashboard', 'leads', 'dead', 'chat', 'campaigns', 'settings', 'import']
+const VIEWS = ['dashboard', 'leads', 'dead', 'campaigns', 'settings', 'import']
 
 export default function App() {
   const [view, setView] = useState('dashboard')
@@ -38,21 +38,15 @@ export default function App() {
   const [campModalOpen, setCampModalOpen] = useState(false)
   const [selectedCampId, setSelectedCampId] = useState(null)
   const [toastMsg, setToastMsg] = useState(null)
-  const [chatUnread, setChatUnread] = useState(0)
-  const [chatLeadPhone, setChatLeadPhone] = useState(null)
+  const [timezone, setTimezone] = useState(() => localStorage.getItem('timezone') || 'UTC')
   const toastTimer = useRef(null)
   const socketRef = useRef(null)
 
   useEffect(() => {
     const s = io(window.location.origin)
     socketRef.current = s
-    s.on('new_chat_message', () => {
-      if (view !== 'chat') {
-        setChatUnread(prev => prev + 1)
-      }
-    })
     return () => s.disconnect()
-  }, [view])
+  }, [])
 
   const showToast = useCallback((msg, warn = false) => {
     setToastMsg({ msg, warn })
@@ -120,16 +114,20 @@ export default function App() {
     loadCampaigns()
   }, [loadCampaigns, refreshId])
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await getSettings()
+        if (s.timezone) {
+          setTimezone(s.timezone)
+          localStorage.setItem('timezone', s.timezone)
+        }
+      } catch {}
+    })()
+  }, [refreshId])
+
   const goView = useCallback((v) => {
     setView(v)
-    if (v === 'chat') setChatUnread(0)
-    refresh()
-  }, [refresh])
-
-  const openChatWithLead = useCallback((phone, name) => {
-    setChatLeadPhone(phone)
-    setView('chat')
-    setChatUnread(0)
     refresh()
   }, [refresh])
 
@@ -158,11 +156,9 @@ export default function App() {
       case 'dashboard':
         return <Dashboard stats={stats} loadStats={loadStats} refreshId={refreshId} goView={goView} openLeadModal={openLeadModal} />
       case 'leads':
-        return <LeadsTable stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} goView={goView} openChatWithLead={openChatWithLead} />
+        return <LeadsTable stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} goView={goView} />
       case 'dead':
         return <DeadList stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} />
-      case 'chat':
-        return <ChatInbox showToast={showToast} initialJid={chatLeadPhone} />
       case 'campaigns':
         return <Campaigns refreshId={refreshId} openCampModal={openCampModal} showToast={showToast} refresh={refresh} />
       case 'settings':
@@ -188,9 +184,9 @@ export default function App() {
         toggleSidebar={toggleSidebar}
         mobileMenuOpen={mobileMenuOpen}
         closeMobileMenu={closeMobileMenu}
-        chatUnread={chatUnread}
       />
       <Layout sidebarCollapsed={sidebarCollapsed} openMobileMenu={openMobileMenu}>
+        <ClockWidget timezone={timezone} />
         <AnimatePresence mode="wait">
           <motion.div
             key={view}

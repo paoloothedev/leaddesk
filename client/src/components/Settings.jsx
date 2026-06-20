@@ -11,18 +11,31 @@ import MessageTemplates from './MessageTemplates'
 import Stages from './Stages'
 import BroadcastJobs from './BroadcastJobs'
 
+const TIMEZONES = [
+  'UTC',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Sao_Paulo', 'America/Argentina/Buenos_Aires',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow', 'Europe/Istanbul',
+  'Africa/Cairo', 'Africa/Johannesburg', 'Africa/Lagos', 'Africa/Nairobi',
+  'Asia/Dubai', 'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka',
+  'Asia/Bangkok', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Seoul',
+  'Australia/Sydney', 'Pacific/Auckland',
+]
+
 const TABS = [
   { id: 'tags', label: 'Tags', icon: Tag },
   { id: 'whatsapp', label: 'WhatsApp', icon: WhatsappLogo },
   { id: 'templates', label: 'Message Templates', icon: ChatText },
   { id: 'stages', label: 'Stages', icon: Signpost },
   { id: 'jobs', label: 'Broadcast Jobs', icon: Broadcast },
+  { id: 'general', label: 'General', icon: GearSix },
   { id: 'backup', label: 'Backup', icon: ClipboardText },
 ]
 
 export default function Settings(props) {
   const [activeTab, setActiveTab] = useState('tags')
   const [countryCode, setCountryCode] = useState('')
+  const [timezone, setTimezone] = useState('UTC')
   const jsonInputRef = useRef(null)
   const { showToast, refresh } = props
 
@@ -31,6 +44,7 @@ export default function Settings(props) {
       try {
         const s = await getSettings()
         if (s.country_code) setCountryCode(s.country_code)
+        if (s.timezone) setTimezone(s.timezone)
       } catch {}
     })()
   }, [])
@@ -136,6 +150,29 @@ export default function Settings(props) {
         {activeTab === 'templates' && <MessageTemplates {...props} />}
         {activeTab === 'stages' && <Stages {...props} />}
         {activeTab === 'jobs' && <BroadcastJobs {...props} />}
+        {activeTab === 'general' && (
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Timezone</h2>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed max-w-[65ch]">
+              Set the timezone used for the clock widget and any time-based features.
+            </p>
+            <div className="flex items-center gap-3">
+              <select value={timezone} onChange={e => setTimezone(e.target.value)}
+                className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
+                {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz.replace('_', ' ')}</option>)}
+              </select>
+              <button onClick={async () => {
+                try {
+                  await saveSetting('timezone', timezone)
+                  showToast('Timezone saved.')
+                } catch { showToast('Failed to save.', true) }
+              }}
+                className="inline-flex items-center px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
+                Save
+              </button>
+            </div>
+          </div>
+        )}
         {activeTab === 'backup' && (
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Backup & Export</h2>

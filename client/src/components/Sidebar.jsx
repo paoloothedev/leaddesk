@@ -1,13 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChartLine, Users, ChatCircle, Skull, Megaphone, GearSix, Upload,
+  ChartLine, Users, Skull, Megaphone, GearSix, Upload,
   SidebarSimple, SunDim, MoonStars, DotsThree
 } from '@phosphor-icons/react'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: ChartLine },
   { id: 'leads', label: 'All Leads', icon: Users },
-  { id: 'chat', label: 'Chat', icon: ChatCircle, badge: true },
   { id: 'dead', label: 'Dead List', icon: Skull },
   { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
   { id: 'settings', label: 'Settings', icon: GearSix },
@@ -27,7 +26,7 @@ const itemVariants = {
   visible: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 20 } }
 }
 
-export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu, chatUnread }) {
+export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu }) {
   return (
     <>
       {mobileMenuOpen && (
@@ -80,11 +79,6 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
               >
                 <Icon size={18} weight={isActive ? 'fill' : 'regular'} className="shrink-0" />
                 {!sidebarCollapsed && <span className="truncate text-xs">{item.label}</span>}
-                {item.badge && chatUnread > 0 && (
-                  <span className={`${sidebarCollapsed ? 'absolute -top-0.5 -right-0.5' : 'ml-auto'} inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[9px] font-bold text-white leading-none`}>
-                    {chatUnread > 99 ? '99+' : chatUnread}
-                  </span>
-                )}
                 {isActive && !sidebarCollapsed && (
                   <motion.div
                     layoutId="activeNav"

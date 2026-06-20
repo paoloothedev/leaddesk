@@ -4,9 +4,9 @@ import { List } from '@phosphor-icons/react'
 export default function Layout({ children, sidebarCollapsed, openMobileMenu }) {
   return (
     <div className="flex min-h-[100dvh] bg-zinc-50 dark:bg-zinc-950">
-      <main className={`flex-1 transition-all duration-300 p-4 md:p-6 lg:p-8 ${
-        sidebarCollapsed ? 'md:ml-16' : 'md:ml-60'
-      }`}>
+        <main className={`flex-1 transition-all duration-300 p-4 md:p-6 lg:p-8 pt-12 ${
+          sidebarCollapsed ? 'md:ml-16' : 'md:ml-60'
+        }`}>
         <button
           onClick={openMobileMenu}
           className="md:hidden flex items-center justify-center w-9 h-9 mb-4 rounded-lg text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
