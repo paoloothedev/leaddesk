@@ -13,6 +13,10 @@ import Import from './components/Import'
 import LeadModal from './components/LeadModal'
 import Toast from './components/Toast'
 import ClockWidget from './components/ClockWidget'
+import Login from './components/Login'
+import Home from './components/Home'
+import ClientsList from './components/ClientsList'
+import GoogleMapsScraper from './components/GoogleMapsScraper'
 import { getStats, getStages, getTags, getCampaigns, getSettings } from './api'
 
 const pageVariants = {
@@ -21,10 +25,10 @@ const pageVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 }
 
-const VIEWS = ['dashboard', 'leads', 'dead', 'campaigns', 'settings', 'import']
+const VIEWS = ['home', 'dashboard', 'leads', 'clients', 'scraper', 'campaigns', 'dead', 'settings', 'import']
 
 export default function App() {
-  const [view, setView] = useState('dashboard')
+  const [view, setView] = useState('home')
   const [refreshId, setRefreshId] = useState(0)
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
@@ -39,6 +43,8 @@ export default function App() {
   const [selectedCampId, setSelectedCampId] = useState(null)
   const [toastMsg, setToastMsg] = useState(null)
   const [timezone, setTimezone] = useState(() => localStorage.getItem('timezone') || 'UTC')
+  const [user, setUser] = useState(null)
+  const [authChecked, setAuthChecked] = useState(false)
   const toastTimer = useRef(null)
   const socketRef = useRef(null)
 
@@ -46,6 +52,14 @@ export default function App() {
     const s = io(window.location.origin)
     socketRef.current = s
     return () => s.disconnect()
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { setUser(data) })
+      .catch(() => {})
+      .finally(() => setAuthChecked(true))
   }, [])
 
   const showToast = useCallback((msg, warn = false) => {
@@ -151,23 +165,42 @@ export default function App() {
     setSelectedCampId(null)
   }, [])
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {}
+    setUser(null)
+  }, [])
+
   const renderView = () => {
     switch (view) {
+      case 'home':
+        return <Home goView={goView} />
       case 'dashboard':
         return <Dashboard stats={stats} loadStats={loadStats} refreshId={refreshId} goView={goView} openLeadModal={openLeadModal} />
       case 'leads':
         return <LeadsTable stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} goView={goView} />
+      case 'clients':
+        return <ClientsList tags={tags} refreshId={refreshId} showToast={showToast} refresh={refresh} />
+      case 'scraper':
+        return <GoogleMapsScraper showToast={showToast} refresh={refresh} />
       case 'dead':
         return <DeadList stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} />
       case 'campaigns':
         return <Campaigns refreshId={refreshId} openCampModal={openCampModal} showToast={showToast} refresh={refresh} />
       case 'settings':
-        return <Settings stages={stages} loadStages={loadStages} tags={tags} loadTags={loadTags} refreshId={refreshId} showToast={showToast} refresh={refresh} />
+        return <Settings user={user} stages={stages} loadStages={loadStages} tags={tags} loadTags={loadTags} refreshId={refreshId} showToast={showToast} refresh={refresh} />
       case 'import':
         return <Import showToast={showToast} refresh={refresh} goView={goView} />
       default:
         return null
     }
+  }
+
+  if (!authChecked) return null
+
+  if (!user) {
+    return <Login onLogin={setUser} />
   }
 
   return (
@@ -184,6 +217,8 @@ export default function App() {
         toggleSidebar={toggleSidebar}
         mobileMenuOpen={mobileMenuOpen}
         closeMobileMenu={closeMobileMenu}
+        user={user}
+        onLogout={handleLogout}
       />
       <Layout sidebarCollapsed={sidebarCollapsed} openMobileMenu={openMobileMenu}>
         <ClockWidget timezone={timezone} />

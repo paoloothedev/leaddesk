@@ -10,6 +10,11 @@ import tagsRouter from './routes/tags.js';
 import templatesRouter from './routes/templates.js';
 import jobsRouter from './routes/jobs.js';
 import settingsRouter from './routes/settings.js';
+import authRouter, { authMiddleware } from './routes/auth.js';
+import accountsRouter from './routes/accounts.js';
+import clientsRouter from './routes/clients.js';
+import emailCampaignsRouter from './routes/emailCampaigns.js';
+import gmapsRouter from './routes/gmaps.js';
 import { initClient, getStatus, onStatusChange, destroyClient, logoutClient } from './whatsapp.js';
 
 import os from 'os';
@@ -24,8 +29,17 @@ const io = new SocketIOServer(server, { cors: { origin: '*' } });
 const PORT = parseInt(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
+app.use((req, res, next) => {
+  req.cookies = {};
+  const raw = req.headers.cookie || '';
+  for (const part of raw.split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k) req.cookies[k] = v.join('=');
+  }
+  next();
+});
 
 app.use('/api/leads', leadsRouter);
 app.use('/api/stages', stagesRouter);
@@ -34,6 +48,14 @@ app.use('/api/tags', tagsRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/auth', authRouter);
+
+app.use('/api', authMiddleware);
+
+app.use('/api/accounts', accountsRouter);
+app.use('/api/clients', clientsRouter);
+app.use('/api/email-campaigns', emailCampaignsRouter);
+app.use('/api/gmaps', gmapsRouter);
 app.get('/api/stats', (req, res) => {
   const db = getDB();
 
@@ -49,18 +71,14 @@ app.get('/api/stats', (req, res) => {
     WHERE l.status = ?
   `).get('active').c;
 
-  // Has menu tag count
-  const hasMenuTag = db.prepare("SELECT id FROM tags WHERE name = ?").get('Has Menu');
-  let hasMenu = 0;
-  if (hasMenuTag) {
-    hasMenu = db.prepare('SELECT COUNT(*) as c FROM lead_tags WHERE tag_id = ?').get(hasMenuTag.id).c;
-  }
+  // Clients converted from leads
+  const totalClients = db.prepare("SELECT COUNT(*) as c FROM clients").get().c;
+  const activeClients = db.prepare("SELECT COUNT(*) as c FROM clients WHERE status = 'active'").get().c;
 
-  // Ready for outreach: verified + has phone + no tags at all
+  // Ready for outreach: verified + has phone
   const readyForOutreach = db.prepare(`
     SELECT COUNT(*) as c FROM leads
     WHERE status = 'active' AND verified = 1 AND phone_valid = 1
-    AND id NOT IN (SELECT lead_id FROM lead_tags)
   `).get().c;
 
   // Verified leads with no tags
@@ -77,6 +95,10 @@ app.get('/api/stats', (req, res) => {
     AND id NOT IN (SELECT lead_id FROM lead_tags)
     AND id NOT IN (SELECT lead_id FROM campaign_leads)
   `).get().c;
+
+  // Campaign stats
+  const totalCampaigns = db.prepare("SELECT COUNT(*) as c FROM campaigns").get().c;
+  const activeJobs = db.prepare("SELECT COUNT(*) as c FROM broadcast_jobs WHERE status IN ('pending', 'running')").get().c;
 
   // Stage breakdown with verified/unverified
   const stageBreakdown = db.prepare(`
@@ -114,12 +136,30 @@ app.get('/api/stats', (req, res) => {
 
   res.json({
     total, verified, unverified, dead, invalidPhone, inCampaign,
-    hasMenu, readyForOutreach, verifiedNoTags, verifiedNoTagsNoCampaign,
+    readyForOutreach, verifiedNoTags, verifiedNoTagsNoCampaign,
+    totalClients, activeClients, totalCampaigns, activeJobs,
     verifiedPercent: total > 0 ? Math.round((verified / total) * 100) : 0,
     stageBreakdown,
     tagBreakdown,
     recentImports,
     recentActivity,
+    metrics: [
+      { key: 'total', label: 'Total Leads', type: 'stat' },
+      { key: 'verified', label: 'Verified Leads', type: 'stat' },
+      { key: 'unverified', label: 'Unverified Leads', type: 'stat' },
+      { key: 'dead', label: 'Dead Leads', type: 'stat' },
+      { key: 'invalidPhone', label: 'Invalid Phone', type: 'stat' },
+      { key: 'inCampaign', label: 'In Campaign', type: 'stat' },
+      { key: 'readyForOutreach', label: 'Ready for Outreach', type: 'stat' },
+      { key: 'verifiedNoTags', label: 'Verified, No Tags', type: 'stat' },
+      { key: 'verifiedNoTagsNoCampaign', label: 'Verified, No Tags & Campaign', type: 'stat' },
+      { key: 'totalClients', label: 'Total Clients', type: 'stat' },
+      { key: 'activeClients', label: 'Active Clients', type: 'stat' },
+      { key: 'totalCampaigns', label: 'Total Campaigns', type: 'stat' },
+      { key: 'activeJobs', label: 'Active Broadcast Jobs', type: 'stat' },
+      ...stageBreakdown.map(s => ({ key: `stage:${s.id}`, label: `Stage: ${s.name}`, type: 'stage', stageId: s.id, color: s.color })),
+      ...tagBreakdown.map(t => ({ key: `tag:${t.id}`, label: `Tag: ${t.name}`, type: 'tag', tagId: t.id, color: t.color })),
+    ],
   });
 });
 

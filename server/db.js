@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import bcrypt from 'bcrypt';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = join(__dirname, 'leaddesk.db');
@@ -21,6 +22,7 @@ export function getDB() {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     initSchema();
+    seedAdminAccount();
     seedStages();
   }
   return db;
@@ -140,17 +142,6 @@ function initSchema() {
       created_at INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      lead_id TEXT,
-      phone TEXT NOT NULL,
-      direction TEXT NOT NULL CHECK(direction IN ('in','out')),
-      content TEXT NOT NULL,
-      status TEXT DEFAULT 'sent',
-      created_at INTEGER NOT NULL,
-      read_at INTEGER
-    );
-
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       action TEXT NOT NULL,
@@ -160,18 +151,106 @@ function initSchema() {
       details TEXT DEFAULT '{}',
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS clients (
+      id TEXT PRIMARY KEY,
+      lead_id TEXT,
+      name TEXT NOT NULL DEFAULT '',
+      phone TEXT DEFAULT '',
+      phone_valid INTEGER DEFAULT 0,
+      email TEXT DEFAULT '',
+      facebook TEXT DEFAULT '',
+      instagram TEXT DEFAULT '',
+      tiktok TEXT DEFAULT '',
+      link TEXT DEFAULT '',
+      location TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      status TEXT DEFAULT 'active',
+      stage TEXT DEFAULT 'new',
+      source TEXT DEFAULT '',
+      assigned_to TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER,
+      FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS client_tags (
+      client_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      PRIMARY KEY (client_id, tag_id),
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+      FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS client_activities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id TEXT NOT NULL,
+      account_id TEXT,
+      action TEXT NOT NULL,
+      details TEXT DEFAULT '{}',
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS email_campaigns (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      subject TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      status TEXT DEFAULT 'draft',
+      total INTEGER DEFAULT 0,
+      sent INTEGER DEFAULT 0,
+      failed INTEGER DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      started_at INTEGER,
+      completed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS email_campaign_leads (
+      lead_id TEXT NOT NULL,
+      campaign_id TEXT NOT NULL,
+      PRIMARY KEY (lead_id, campaign_id),
+      FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+      FOREIGN KEY (campaign_id) REFERENCES email_campaigns(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS accounts (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      email TEXT DEFAULT '',
+      role TEXT NOT NULL DEFAULT 'user',
+      parent_id TEXT,
+      permissions TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (parent_id) REFERENCES accounts(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+    );
   `);
   // Add show_in_dashboard column if not exist
   try {
     db.exec('ALTER TABLE tags ADD COLUMN show_in_dashboard INTEGER NOT NULL DEFAULT 1');
   } catch {}
-  // Add wa_msg_id column to chat_messages if not exist
   try {
-    db.exec('ALTER TABLE chat_messages ADD COLUMN wa_msg_id TEXT');
+    db.exec('ALTER TABLE accounts ADD COLUMN email TEXT DEFAULT ""');
   } catch {}
-  try {
-    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_messages_wa_msg_id ON chat_messages(wa_msg_id)');
-  } catch {}
+}
+
+function seedAdminAccount() {
+  const count = db.prepare('SELECT COUNT(*) as c FROM accounts').get();
+  if (count.c === 0) {
+    const hash = bcrypt.hashSync('admin', 10);
+    db.prepare("INSERT INTO accounts (id, username, password_hash, display_name, role, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run('admin', 'admin', hash, 'Admin', 'admin', '[]', Date.now());
+  }
 }
 
 function seedStages() {

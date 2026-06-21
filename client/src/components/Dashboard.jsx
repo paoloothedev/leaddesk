@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUpRight, CheckCircle, Circle, UploadSimple, ListPlus, ChartLine } from '@phosphor-icons/react'
+import { ArrowUpRight, CheckCircle, Circle, UploadSimple, ListPlus, ChartLine, GearSix } from '@phosphor-icons/react'
 
 function ago(ts) {
   const diff = Date.now() - ts
@@ -14,8 +14,8 @@ function ago(ts) {
 
 function StatsSkeleton() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-      {[...Array(5)].map((_, i) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      {[...Array(6)].map((_, i) => (
         <div key={i} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900">
           <div className="skeleton h-3 w-20 mb-3" />
           <div className="skeleton h-7 w-16" />
@@ -39,17 +39,45 @@ const itemVariants = {
 }
 
 export default function Dashboard({ stats, loadStats, refreshId, goView, openLeadModal }) {
+  const [dashCards, setDashCards] = useState(null)
+  const [showCustomize, setShowCustomize] = useState(false)
+
   useEffect(() => {
     loadStats()
+    const saved = localStorage.getItem('dashboard_cards_config')
+    if (saved) {
+      try { setDashCards(JSON.parse(saved)) } catch {}
+    }
   }, [loadStats, refreshId])
 
-  const pipeline = useMemo(() => [
-    { label: 'New (unverified)', value: stats?.unverified ?? 0, color: 'bg-zinc-400', textColor: 'text-zinc-600 dark:text-zinc-400' },
-    { label: 'Verified', value: stats?.verified ?? 0, color: 'bg-emerald-500', textColor: 'text-emerald-600 dark:text-emerald-400' },
-    { label: 'Has Menu', value: stats?.hasMenu ?? 0, color: 'bg-amber-500', textColor: 'text-amber-600 dark:text-amber-400' },
-    { label: 'Ready for Outreach', value: stats?.readyForOutreach ?? 0, color: 'bg-violet-500', textColor: 'text-violet-600 dark:text-violet-400' },
-    { label: 'Dead (review)', value: stats?.dead ?? 0, color: 'bg-zinc-300 dark:bg-zinc-600', textColor: 'text-zinc-500 dark:text-zinc-400' },
-  ], [stats])
+  const { generalCards, stageCards, tagCards } = useMemo(() => {
+    if (!dashCards) return { generalCards: [], stageCards: [], tagCards: [] }
+    const enabled = dashCards.filter(c => c.enabled)
+    const general = []
+    const stages = []
+    const tags = []
+    for (const c of enabled) {
+      let value = 0
+      let resolvedColor = c.color
+      if (c.metric.startsWith('stage:')) {
+        const stageId = c.metric.replace('stage:', '')
+        const stage = stats?.stageBreakdown?.find(s => s.id === stageId)
+        value = stage?.count ?? 0
+        if (stage?.color) resolvedColor = stage.color
+        stages.push({ ...c, value, resolvedColor })
+      } else if (c.metric.startsWith('tag:')) {
+        const tagId = c.metric.replace('tag:', '')
+        const tag = stats?.tagBreakdown?.find(t => t.id === tagId)
+        value = tag?.total ?? 0
+        if (tag?.color) resolvedColor = tag.color
+        tags.push({ ...c, value, resolvedColor })
+      } else {
+        value = stats?.[c.metric] ?? 0
+        general.push({ ...c, value, resolvedColor })
+      }
+    }
+    return { generalCards: general, stageCards: stages, tagCards: tags }
+  }, [stats, dashCards])
 
   if (!stats) return <StatsSkeleton />
 
@@ -58,25 +86,30 @@ export default function Dashboard({ stats, loadStats, refreshId, goView, openLea
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Dashboard</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Your lead pipeline at a glance.</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Your outreach pipeline at a glance.</p>
         </div>
+        <button onClick={() => goView('settings')}
+          className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+          <GearSix size={12} />
+          Customize Cards
+        </button>
       </div>
 
       <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8"
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-8"
       >
-        {pipeline.map(s => (
+        {generalCards.map(s => (
           <motion.div
-            key={s.label}
+            key={s.id}
             variants={itemVariants}
             className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/50 transition-all duration-200"
           >
             <div className="flex items-center gap-2 mb-2.5">
               <span className={`w-2 h-2 rounded-full ${s.color}`} />
-              <span className={`text-[11px] font-medium uppercase tracking-wider ${s.textColor}`}>{s.label}</span>
+              <span className={`text-[11px] font-medium uppercase tracking-wider ${s.textColor}`}>{s.name}</span>
             </div>
             <div className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               {s.value}
@@ -84,6 +117,66 @@ export default function Dashboard({ stats, loadStats, refreshId, goView, openLea
           </motion.div>
         ))}
       </motion.div>
+
+      {stageCards.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, type: 'spring', stiffness: 100, damping: 20 }}
+          className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 overflow-hidden mb-8"
+        >
+          <div className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">By Stage</h2>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
+            {stageCards.map(s => (
+              <motion.div
+                key={s.id}
+                variants={itemVariants}
+                className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/50 transition-all duration-200"
+              >
+                <div className="flex items-center gap-2 mb-2.5">
+                  <span className={`w-2 h-2 rounded-full`} style={{ background: s.resolvedColor }} />
+                  <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: s.resolvedColor }}>{s.name}</span>
+                </div>
+                <div className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                  {s.value}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {tagCards.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, type: 'spring', stiffness: 100, damping: 20 }}
+          className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 overflow-hidden mb-8"
+        >
+          <div className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">By Tag</h2>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
+            {tagCards.map(s => (
+              <motion.div
+                key={s.id}
+                variants={itemVariants}
+                className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/50 transition-all duration-200"
+              >
+                <div className="flex items-center gap-2 mb-2.5">
+                  <span className={`w-2 h-2 rounded-full`} style={{ background: s.resolvedColor }} />
+                  <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: s.resolvedColor }}>{s.name}</span>
+                </div>
+                <div className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                  {s.value}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <motion.div

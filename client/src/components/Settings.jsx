@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   DownloadSimple, UploadSimple, FileCsv, ClipboardText,
-  Tag, WhatsappLogo, ChatText, Signpost, Broadcast, GearSix
+  Tag, WhatsappLogo, Signpost, GearSix, UsersThree, Lock, UserCircle, ChartLine
 } from '@phosphor-icons/react'
-import { exportBackup, importBackup, exportCSV, getSettings, saveSetting } from '../api'
+import { exportBackup, importBackup, exportCSV, getSettings, saveSetting, getStats } from '../api'
 import TagsView from './Tags'
+import Stages from './Stages'
 import WhatsAppPage from './WhatsAppPage'
 import MessageTemplates from './MessageTemplates'
-import Stages from './Stages'
-import BroadcastJobs from './BroadcastJobs'
+import Accounts from './Accounts'
+import DashboardConfig from './DashboardConfig'
 
 const TIMEZONES = [
   'UTC',
@@ -22,20 +23,22 @@ const TIMEZONES = [
   'Australia/Sydney', 'Pacific/Auckland',
 ]
 
-const TABS = [
-  { id: 'tags', label: 'Tags', icon: Tag },
-  { id: 'whatsapp', label: 'WhatsApp', icon: WhatsappLogo },
-  { id: 'templates', label: 'Message Templates', icon: ChatText },
-  { id: 'stages', label: 'Stages', icon: Signpost },
-  { id: 'jobs', label: 'Broadcast Jobs', icon: Broadcast },
+const NAV = [
   { id: 'general', label: 'General', icon: GearSix },
+  { id: 'account', label: 'Account', icon: UserCircle },
+  { id: 'dashboard', label: 'Dashboard', icon: ChartLine },
+  { id: 'tags', label: 'Tags', icon: Tag },
+  { id: 'stages', label: 'Stages', icon: Signpost },
+  { id: 'whatsapp', label: 'WhatsApp', icon: WhatsappLogo },
+  { id: 'team', label: 'Team', icon: UsersThree },
   { id: 'backup', label: 'Backup', icon: ClipboardText },
 ]
 
-export default function Settings(props) {
-  const [activeTab, setActiveTab] = useState('tags')
+export default function Settings({ user, ...props }) {
+  const [activeTab, setActiveTab] = useState('general')
   const [countryCode, setCountryCode] = useState('')
   const [timezone, setTimezone] = useState('UTC')
+  const [metrics, setMetrics] = useState([])
   const jsonInputRef = useRef(null)
   const { showToast, refresh } = props
 
@@ -45,6 +48,10 @@ export default function Settings(props) {
         const s = await getSettings()
         if (s.country_code) setCountryCode(s.country_code)
         if (s.timezone) setTimezone(s.timezone)
+      } catch {}
+      try {
+        const stats = await getStats()
+        if (stats.metrics) setMetrics(stats.metrics)
       } catch {}
     })()
   }, [])
@@ -89,47 +96,25 @@ export default function Settings(props) {
     e.target.value = ''
   }
 
-  return (
-    <div className="max-w-[1400px] mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Settings</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Manage tags, WhatsApp connection, and pipeline stages.</p>
-      </div>
-
-      <div className="flex gap-1 mb-6 bg-zinc-100 dark:bg-zinc-900 rounded-xl p-1 border border-zinc-200 dark:border-zinc-800 overflow-x-auto">
-        {TABS.map(tab => {
-          const Icon = tab.icon
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 h-9 rounded-lg text-[11px] font-medium whitespace-nowrap transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200 dark:border-zinc-700'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-              }`}
-            >
-              <Icon size={14} />
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
-
-      <motion.div
-        key={activeTab}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-      >
-        {activeTab === 'tags' && <TagsView {...props} />}
-        {activeTab === 'whatsapp' && (
-          <div>
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50 mb-5">
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Phone Format</h2>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed max-w-[65ch]">
-                Set your country code so imported phone numbers are formatted correctly for WhatsApp.
-              </p>
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'general':
+        return (
+          <div className="space-y-5">
+            <Section title="Timezone" desc="Set the timezone used for the clock widget and any time-based features.">
+              <div className="flex items-center gap-3">
+                <select value={timezone} onChange={e => setTimezone(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
+                  {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz.replace('_', ' ')}</option>)}
+                </select>
+                <button onClick={async () => {
+                  try { await saveSetting('timezone', timezone); showToast('Timezone saved.') } catch { showToast('Failed.', true) }
+                }} className="inline-flex items-center px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
+                  Save
+                </button>
+              </div>
+            </Section>
+            <Section title="Phone Format" desc="Set your country code so imported phone numbers are formatted correctly.">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-zinc-900 dark:text-zinc-100 font-medium">+</span>
                 <input type="text" value={countryCode} onChange={e => setCountryCode(e.target.value.replace(/\D/g, ''))}
@@ -140,64 +125,184 @@ export default function Settings(props) {
                   Save
                 </button>
               </div>
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-3">
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-2">
                 Example: 010 9423 4694 {countryCode ? `becomes +${countryCode} 109 423 4694` : 'will be formatted with your code'} during import.
               </p>
-            </div>
-            <WhatsAppPage {...props} />
+            </Section>
           </div>
-        )}
-        {activeTab === 'templates' && <MessageTemplates {...props} />}
-        {activeTab === 'stages' && <Stages {...props} />}
-        {activeTab === 'jobs' && <BroadcastJobs {...props} />}
-        {activeTab === 'general' && (
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Timezone</h2>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed max-w-[65ch]">
-              Set the timezone used for the clock widget and any time-based features.
-            </p>
-            <div className="flex items-center gap-3">
-              <select value={timezone} onChange={e => setTimezone(e.target.value)}
-                className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
-                {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz.replace('_', ' ')}</option>)}
-              </select>
-              <button onClick={async () => {
-                try {
-                  await saveSetting('timezone', timezone)
-                  showToast('Timezone saved.')
-                } catch { showToast('Failed to save.', true) }
-              }}
-                className="inline-flex items-center px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
-                Save
-              </button>
+        )
+      case 'account': return <AccountProfile user={user} showToast={showToast} />
+      case 'tags': return <TagsView {...props} />
+      case 'stages': return <Stages {...props} />
+      case 'dashboard': return (
+        <Section title="Dashboard Cards" desc="Customize which stat cards appear on the dashboard, their names, colors, and what data they show. Drag to reorder.">
+          <DashboardConfig metrics={metrics} showToast={showToast} />
+        </Section>
+      )
+      case 'whatsapp': return (
+        <div className="space-y-5">
+          <WhatsAppPage {...props} />
+          <Section title="Message Templates" desc="Create reusable message templates for your WhatsApp campaigns. Use {{name}}, {{phone}}, {{email}} as variables.">
+            <MessageTemplates {...props} />
+          </Section>
+        </div>
+      )
+      case 'team': return <Accounts {...props} />
+      case 'backup': return (
+        <Section title="Backup & Export" desc="Export your data as JSON or CSV, or restore a previous backup.">
+          <div className="flex flex-wrap gap-3">
+            <button onClick={handleExport}
+              className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
+              <DownloadSimple size={14} /> Export JSON
+            </button>
+            <button onClick={exportCSV}
+              className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
+              <FileCsv size={14} /> Export CSV
+            </button>
+            <button onClick={handleImportJSON}
+              className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
+              <UploadSimple size={14} /> Import JSON
+            </button>
+          </div>
+          <input ref={jsonInputRef} type="file" accept=".json" className="hidden" onChange={handleJSONFile} />
+        </Section>
+      )
+      default: return null
+    }
+  }
+
+  return (
+    <div className="max-w-[1400px] mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Settings</h1>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Configure your workspace, integrations, and accounts.</p>
+      </div>
+
+      <div className="flex gap-6 items-start">
+        <nav className="w-48 shrink-0 sticky top-4">
+          <div className="space-y-0.5">
+            {NAV.map(item => {
+              const Icon = item.icon
+              const isActive = activeTab === item.id
+              return (
+                <button key={item.id} onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
+                  }`}>
+                  <Icon size={15} weight={isActive ? 'fill' : 'regular'} className="shrink-0" />
+                  {item.label}
+                </button>
+              )
+            })}
+          </div>
+        </nav>
+
+        <div className="flex-1 min-w-0">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {renderContent()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Section({ title, desc, children }) {
+  return (
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50">
+      <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1">{title}</h2>
+      {desc && <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4 leading-relaxed max-w-[65ch]">{desc}</p>}
+      {children}
+    </div>
+  )
+}
+
+function AccountProfile({ user, showToast }) {
+  const [name, setName] = useState(user?.display_name || '')
+  const [email, setEmail] = useState(user?.email || '')
+  const [username, setUsername] = useState(user?.username || '')
+  const [newPass, setNewPass] = useState('')
+  const [confirmPass, setConfirmPass] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSaveProfile = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/accounts/me', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ display_name: name, email, username }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      showToast('Profile updated.')
+    } catch (err) { showToast(err.message || 'Failed.', true) }
+    setSaving(false)
+  }
+
+  const handleChangePassword = async () => {
+    if (newPass !== confirmPass) { showToast('Passwords do not match.', true); return }
+    if (newPass.length < 4) { showToast('Password too short.', true); return }
+    try {
+      const res = await fetch(`/api/accounts/${user.id}/change-password`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ password: newPass }),
+      })
+      if (!res.ok) throw new Error()
+      showToast('Password changed.')
+      setNewPass(''); setConfirmPass('')
+    } catch { showToast('Failed to change password.', true) }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Section title="Your Profile" desc="Manage your account details.">
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">Display Name</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40 transition-colors" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">Username</label>
+              <input type="text" value={username} onChange={e => setUsername(e.target.value)}
+                className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40 transition-colors" />
             </div>
           </div>
-        )}
-        {activeTab === 'backup' && (
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Backup & Export</h2>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-5 leading-relaxed max-w-[65ch]">Export your data as JSON or CSV, or restore a previous backup.</p>
-            <div className="flex flex-wrap gap-3">
-              <button onClick={handleExport}
-                className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
-                <DownloadSimple size={14} />
-                Export JSON
-              </button>
-              <button onClick={exportCSV}
-                className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
-                <FileCsv size={14} />
-                Export CSV
-              </button>
-              <button onClick={handleImportJSON}
-                className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
-                <UploadSimple size={14} />
-                Import JSON
-              </button>
-            </div>
-            <input ref={jsonInputRef} type="file" accept=".json" className="hidden" onChange={handleJSONFile} />
+          <div>
+            <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
+              className="w-full sm:w-80 h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 outline-none focus:ring-1 focus:ring-emerald-500/40 transition-colors" />
           </div>
-        )}
-      </motion.div>
+          <button onClick={handleSaveProfile} disabled={saving}
+            className="inline-flex items-center px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98] disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save Profile'}
+          </button>
+        </div>
+      </Section>
+
+      <Section title="Change Password" desc="Update your account password.">
+        <div className="flex flex-col sm:flex-row items-start gap-3">
+          <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="New password"
+            className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 outline-none focus:ring-1 focus:ring-emerald-500/40 w-52" />
+          <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Confirm password"
+            className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 outline-none focus:ring-1 focus:ring-emerald-500/40 w-52" />
+          <button onClick={handleChangePassword} disabled={!newPass || !confirmPass}
+            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98] disabled:opacity-50">
+            <Lock size={12} /> Update Password
+          </button>
+        </div>
+      </Section>
     </div>
   )
 }

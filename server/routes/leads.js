@@ -236,6 +236,15 @@ router.post('/bulk', (req, res) => {
     for (const id of ids) del.run(id, tagId);
   } else if (action === 'delete') {
     db.prepare(`DELETE FROM leads WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids);
+  } else if (action === 'convert') {
+    const insertClient = db.prepare(`INSERT OR IGNORE INTO clients (id, lead_id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
+    for (const id of ids) {
+      const l = getLead.get(id);
+      if (l) {
+        insertClient.run(crypto.randomUUID(), l.id, l.name, l.phone, l.phone_valid, l.email, l.facebook, l.instagram, l.tiktok, l.link, l.location, l.notes, 'active', 'lead', Date.now());
+      }
+    }
   }
 
   logAudit('bulk', 'lead', ids.join(','), `${action} (${ids.length} leads)`, { action, stageId, tagId });

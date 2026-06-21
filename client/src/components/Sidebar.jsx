@@ -1,14 +1,17 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChartLine, Users, Skull, Megaphone, GearSix, Upload,
-  SidebarSimple, SunDim, MoonStars, DotsThree
+  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, House, MagnifyingGlass
 } from '@phosphor-icons/react'
 
 const NAV_ITEMS = [
+  { id: 'home', label: 'Home', icon: House },
   { id: 'dashboard', label: 'Dashboard', icon: ChartLine },
   { id: 'leads', label: 'All Leads', icon: Users },
-  { id: 'dead', label: 'Dead List', icon: Skull },
+  { id: 'clients', label: 'Clients', icon: UserCircle },
+  { id: 'scraper', label: 'Maps Scraper', icon: MagnifyingGlass },
   { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
+  { id: 'dead', label: 'Dead List', icon: Skull },
   { id: 'settings', label: 'Settings', icon: GearSix },
   { id: 'import', label: 'Import', icon: Upload },
 ]
@@ -26,7 +29,7 @@ const itemVariants = {
   visible: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 20 } }
 }
 
-export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu }) {
+export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu, user, onLogout }) {
   return (
     <>
       {mobileMenuOpen && (
@@ -115,6 +118,27 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
             {!sidebarCollapsed && <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>}
           </button>
         </div>
+
+        {user && (
+          <div className={`px-2 pb-3 border-t border-zinc-800 pt-3 ${sidebarCollapsed ? 'flex justify-center' : ''}`}>
+            {!sidebarCollapsed && (
+              <div className="px-1 mb-2">
+                <div className="text-[11px] font-medium text-zinc-200 truncate">{user.display_name || user.username}</div>
+                <div className="text-[10px] text-zinc-500 capitalize">{user.role}</div>
+              </div>
+            )}
+            <button
+              onClick={onLogout}
+              className={`flex items-center rounded-lg transition-colors text-zinc-500 hover:text-red-400 hover:bg-zinc-800/50 ${
+                sidebarCollapsed ? 'justify-center w-10 h-10' : 'w-full px-3 h-9 gap-2.5 text-xs font-medium'
+              }`}
+              title="Sign out"
+            >
+              <SignOut size={16} className="shrink-0" />
+              {!sidebarCollapsed && <span>Sign out</span>}
+            </button>
+          </div>
+        )}
 
         <AnimatePresence>
           {stats && !sidebarCollapsed && (

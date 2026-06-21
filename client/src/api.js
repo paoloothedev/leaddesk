@@ -2,6 +2,7 @@ const API = '/api';
 
 async function request(path, options = {}) {
   const res = await fetch(API + path, {
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   });
@@ -44,7 +45,7 @@ export function bulkAction(ids, action, stageId, tagId) {
 export function importPreview(file) {
   const formData = new FormData();
   formData.append('file', file);
-  return fetch(API + '/leads/import/preview', { method: 'POST', body: formData }).then(r => r.json());
+  return fetch(API + '/leads/import/preview', { method: 'POST', body: formData, credentials: 'include' }).then(r => r.json());
 }
 
 export function importConfirm(rows, skipDupes, updateMode, checkWhatsApp, filename) {
@@ -174,23 +175,6 @@ export function getAuditLog(limit) {
   return request('/audit-log' + (limit ? '?limit=' + limit : ''));
 }
 
-// Chat
-export function getChats() {
-  return request('/chats');
-}
-
-export function getChatMessages(phone) {
-  return request('/chats/' + encodeURIComponent(phone));
-}
-
-export function sendChatMessage(phone, content, leadId) {
-  return request('/chats/' + encodeURIComponent(phone) + '/send', { method: 'POST', body: JSON.stringify({ content, leadId }) });
-}
-
-export function markChatRead(phone) {
-  return request('/chats/' + encodeURIComponent(phone) + '/read', { method: 'POST' });
-}
-
 // Settings
 export function getSettings() {
   return request('/settings');
@@ -198,4 +182,78 @@ export function getSettings() {
 
 export function saveSetting(key, value) {
   return request('/settings', { method: 'PUT', body: JSON.stringify({ key, value }) });
+}
+
+// Clients
+export function getClients(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request('/clients' + (qs ? '?' + qs : ''));
+}
+
+export function getClient(id) {
+  return request('/clients/' + id);
+}
+
+export function createClient(data) {
+  return request('/clients', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateClient(id, data) {
+  return request('/clients/' + id, { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export function deleteClient(id) {
+  return request('/clients/' + id, { method: 'DELETE' });
+}
+
+export function addClientActivity(id, action, details) {
+  return request('/clients/' + id + '/activity', { method: 'POST', body: JSON.stringify({ action, details }) });
+}
+
+// Email Campaigns
+export function getEmailCampaigns() {
+  return request('/email-campaigns');
+}
+
+export function createEmailCampaign(data) {
+  return request('/email-campaigns', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateEmailCampaign(id, data) {
+  return request('/email-campaigns/' + id, { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export function deleteEmailCampaign(id) {
+  return request('/email-campaigns/' + id, { method: 'DELETE' });
+}
+
+export function addLeadsToEmailCampaign(id, leadIds, count, force) {
+  const body = leadIds ? { leadIds, force } : { count, force };
+  return request('/email-campaigns/' + id + '/leads', { method: 'POST', body: JSON.stringify(body) });
+}
+
+// Google Maps Scraper
+export function scrapeGmaps(query, options = {}) {
+  return request('/gmaps/scrape', { method: 'POST', body: JSON.stringify({ query, ...options }) });
+}
+
+export function getGmapsJobs() {
+  return request('/gmaps/jobs');
+}
+
+export function getGmapsJob(id) {
+  return request('/gmaps/jobs/' + id);
+}
+
+export function deleteGmapsJob(id) {
+  return request('/gmaps/jobs/' + id, { method: 'DELETE' });
+}
+
+export function importGmapsJob(id, options = {}) {
+  return request('/gmaps/jobs/' + id + '/import', { method: 'POST', body: JSON.stringify(options) });
+}
+
+export function downloadGmapsCSV(id, query) {
+  const safeName = (query || 'gmaps-results').replace(/[^a-zA-Z0-9-_ ]/g, '').trim().replace(/\s+/g, '-');
+  window.open(`/api/gmaps/jobs/${id}/download`, '_blank');
 }

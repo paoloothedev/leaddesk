@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { X, PaperPlaneTilt, Spinner, Clock } from '@phosphor-icons/react'
+import { X, PaperPlaneTilt, Spinner } from '@phosphor-icons/react'
 import { getTemplates, createJob } from '../api'
 
 export default function WhatsAppSend({ leads, campaignName, close, showToast }) {
@@ -8,7 +8,6 @@ export default function WhatsAppSend({ leads, campaignName, close, showToast }) 
   const [sending, setSending] = useState(false)
   const [templates, setTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
-  const [delay, setDelay] = useState({ min: 1, max: 5 })
 
   useEffect(() => {
     (async () => { try { const t = await getTemplates(); setTemplates(t) } catch {} })()
@@ -29,10 +28,8 @@ export default function WhatsAppSend({ leads, campaignName, close, showToast }) 
         campaignId: campaignName || null,
         message: message.trim(),
         leads: leadsData,
-        delayMin: delay.min,
-        delayMax: delay.max,
       })
-      showToast(`Broadcast job created for ${leads.length} leads. View progress in Settings > Broadcast Jobs.`)
+      showToast(`Broadcast job created for ${leads.length} leads. Anti-blocking delays are automatic.`)
       close()
     } catch (err) { showToast(err.message || 'Failed to create job.', true) }
     setSending(false)
@@ -72,17 +69,9 @@ export default function WhatsAppSend({ leads, campaignName, close, showToast }) 
               placeholder="Type your message here..." />
           </div>
 
-          <div className="mb-5">
-            <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Delay between messages (seconds)</label>
-            <div className="flex items-center gap-3">
-              <input type="number" value={delay.min} onChange={e => setDelay(d => ({ ...d, min: parseInt(e.target.value) || 1 }))} min="0"
-                className="w-24 h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" placeholder="Min" />
-              <span className="text-xs text-zinc-400 dark:text-zinc-500">to</span>
-              <input type="number" value={delay.max} onChange={e => setDelay(d => ({ ...d, max: parseInt(e.target.value) || 5 }))} min="0"
-                className="w-24 h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" placeholder="Max" />
-              <Clock size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />
-            </div>
-          </div>
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-5 px-1">
+            Delays are automatic: human-like typing simulation, variable gaps between messages, and long breaks every 8-15 messages.
+          </p>
 
           <div className="flex gap-3">
             <button onClick={close}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { io } from 'socket.io-client'
-import { WhatsappLogo, Plugs, PlugsConnected } from '@phosphor-icons/react'
+import { WhatsappLogo, Plugs, PlugsConnected, SignOut } from '@phosphor-icons/react'
 
 export default function WhatsAppPage({ showToast }) {
   const [socket, setSocket] = useState(null)
@@ -22,6 +22,10 @@ export default function WhatsAppPage({ showToast }) {
 
   const handleInit = async () => { socket?.emit('wa_init') }
   const handleDisconnect = async () => { socket?.emit('wa_disconnect') }
+  const handleLogout = async () => {
+    if (!window.confirm('Logout and connect a different WhatsApp account?')) return
+    socket?.emit('wa_logout')
+  }
 
   const statusConfig = {
     disconnected: { dot: 'bg-zinc-400', label: 'Disconnected', icon: Plugs },
@@ -68,11 +72,18 @@ export default function WhatsAppPage({ showToast }) {
           </button>
         )}
         {waStatus === 'connected' && (
-          <button onClick={handleDisconnect}
-            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.98]">
-            <Plugs size={14} />
-            Disconnect
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleDisconnect}
+              className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors active:scale-[0.98]">
+              <Plugs size={14} />
+              Disconnect
+            </button>
+            <button onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.98]">
+              <SignOut size={14} />
+              Logout
+            </button>
+          </div>
         )}
       </motion.div>
     </div>

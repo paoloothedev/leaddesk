@@ -151,6 +151,43 @@ export async function sendMessage(phone, text) {
   await client.sendMessage(jid, text);
 }
 
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function addMessageVariation(text) {
+  const zwsp = ['\u200B', '\u200C', '\u200D', '\uFEFF'];
+  let result = '';
+  for (const char of text) {
+    result += char;
+    if (Math.random() < 0.12) {
+      result += zwsp[Math.floor(Math.random() * zwsp.length)];
+    }
+  }
+  return result;
+}
+
+export async function sendHumanMessage(phone, text) {
+  if (!client || !clientReady) throw new Error('WhatsApp not connected');
+  const jid = phone.replace(/\D/g, '') + '@c.us';
+
+  try { await client.sendPresenceAvailable(); } catch {}
+  await sleep(1000 + Math.random() * 2000);
+
+  try { await client.sendSeen(jid); } catch {}
+  await sleep(2000 + Math.random() * 3000);
+
+  await sleep(2000 + Math.random() * 4000);
+
+  const varied = addMessageVariation(text);
+  await client.sendMessage(jid, varied);
+
+  await sleep(1500 + Math.random() * 2500);
+  try { await client.sendPresenceUnavailable(); } catch {}
+
+  return true;
+}
+
 export async function checkPhones(phones) {
   if (!client || !clientReady) throw new Error('WhatsApp not connected');
   const results = [];
@@ -181,110 +218,24 @@ export async function destroyClient() {
   }
 }
 
+export async function logoutClient() {
+  if (client) {
+    try { await client.destroy(); } catch {}
+    client = null;
+    clientReady = false;
+  }
+  qrData = null;
+  currentStatus = 'disconnected';
+  notifyStatus();
+  try {
+    const sessionDir = path.join(AUTH_DIR, 'session');
+    if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
+  } catch {}
+  cleanChromeLocks();
+}
+
 export function formatPhoneForWA(phone) {
   return phone.replace(/\D/g, '');
 }
 
-const typeLabels = {
-  image: '[Image]',
-  video: '[Video]',
-  audio: '[Audio]',
-  ptt: '[Voice]',
-  sticker: '[Sticker]',
-  document: '[Document]',
-  location: '[Location]',
-  vcard: '[Contact]',
-  revoked: '[Message removed]',
-  call_log: '[Call]',
-  gif: '[GIF]',
-  interactive: '',
-  notification_template: '',
-};
 
-function messagePreview(msg) {
-  if (!msg) return '';
-  const body = msg.body || '';
-  const caption = msg.caption || '';
-  const type = msg.type || 'chat';
-
-  if (type === 'chat') return body;
-
-  const label = typeLabels[type] || `[${type}]`;
-
-  if (type === 'image' || type === 'video' || type === 'document' || type === 'gif') {
-    if (caption) return `${label} ${caption}`;
-  }
-
-  // If body looks like raw binary/base64, don't show it
-  if (body.length > 50 && /^[A-Za-z0-9+/=]+$/.test(body.slice(0, 100))) {
-    return label;
-  }
-
-  return body || label;
-}
-
-function extractPhone(c) {
-  const user = c.id.user;
-  if (user && user !== '0') return user;
-  const contactNumber = c.contact?.number;
-  if (contactNumber) {
-    const cleaned = contactNumber.replace(/[^0-9]/g, '');
-    if (cleaned) return cleaned;
-  }
-  return user || '0';
-}
-
-export async function getWAChats() {
-  if (!client || !clientReady) throw new Error('WhatsApp not connected');
-  const chats = await client.getChats();
-  const results = [];
-  for (const c of chats) {
-    if (c.id.server === 'c.us' && c.id.user === '0') continue;
-    const phone = extractPhone(c);
-    const preview = messagePreview(c.lastMessage);
-    results.push({
-      jid: c.id._serialized,
-      phone,
-      name: c.name || c.contact?.name || c.id.user,
-      archived: !!c.archived,
-      lastMessage: c.lastMessage ? {
-        content: preview,
-        fromMe: c.lastMessage.fromMe,
-        timestamp: c.lastMessage.timestamp * 1000,
-        type: c.lastMessage.type || 'chat',
-      } : null,
-      unread: c.unreadCount || 0,
-    });
-  }
-  results.sort((a, b) => {
-    const aTime = a.lastMessage?.timestamp || 0;
-    const bTime = b.lastMessage?.timestamp || 0;
-    return bTime - aTime;
-  });
-  return results;
-}
-
-export async function getWAChatMessages(jid) {
-  if (!client || !clientReady) throw new Error('WhatsApp not connected');
-  const chat = await client.getChatById(jid);
-  const msgs = await chat.fetchMessages({ limit: 100 });
-  return msgs.map(m => ({
-    waMsgId: m.id.id,
-    content: messagePreview(m),
-    type: m.type || 'chat',
-    fromMe: m.fromMe,
-    timestamp: m.timestamp * 1000,
-    hasMedia: !!m.hasMedia,
-    mediaType: m.hasMedia ? m.type : null,
-  }));
-}
-
-export async function getMedia(jid, msgId) {
-  if (!client || !clientReady) throw new Error('WhatsApp not connected');
-  const chat = await client.getChatById(jid);
-  const msgs = await chat.fetchMessages({ limit: 200 });
-  const msg = msgs.find(m => m.id.id === msgId);
-  if (!msg || !msg.hasMedia) throw new Error('Media not found');
-  const media = await msg.downloadMedia();
-  return media;
-}
