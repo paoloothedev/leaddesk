@@ -3,32 +3,50 @@ import { createJob, getJob, listJobs, deleteJob } from '../gmaps/jobs.js';
 import { getDB, logAudit } from '../db.js';
 import crypto from 'crypto';
 
+let waCheckPhones = null, waGetStatus = null;
+try {
+  const wa = await import('../whatsapp.js');
+  waCheckPhones = wa.checkPhones;
+  waGetStatus = wa.getStatus;
+} catch {}
+
 const router = Router();
 
 router.post('/scrape', (req, res) => {
-  const { query, depth, lang, geo, zoom } = req.body;
-  if (!query || !query.trim()) return res.status(400).json({ error: 'Query is required' });
+  const { name, query, queries, depth, lang, geo, zoom } = req.body;
 
-  const job = createJob(query.trim(), {
-    depth: Math.min(Math.max(parseInt(depth) || 5, 1), 10),
+  let queryList = [];
+  if (queries && Array.isArray(queries) && queries.length > 0) {
+    queryList = queries.map(q => q.trim()).filter(Boolean);
+  } else if (query && query.trim()) {
+    queryList = [query.trim()];
+  }
+
+  if (!queryList.length) return res.status(400).json({ error: 'At least one query is required' });
+
+  const job = createJob(name || queryList[0], queryList, {
+    depth: Math.min(Math.max(parseInt(depth) || 10, 1), 20),
     lang: lang || 'en',
     geo: geo || '',
     zoom: Math.min(Math.max(parseInt(zoom) || 0, 0), 21),
   });
 
-  logAudit('gmaps_scrape', 'gmaps_job', job.id, query.trim(), { by: req.user?.id });
+  logAudit('gmaps_scrape', 'gmaps_job', job.id, job.name, { by: req.user?.id, queries: queryList, geo, zoom });
   res.json({ job_id: job.id, status: job.status });
 });
 
 router.get('/jobs', (req, res) => {
   const allJobs = listJobs().map(j => ({
     id: j.id,
-    query: j.query,
+    name: j.name,
+    queries: j.queries,
     options: j.options,
     status: j.status,
     result_count: j.results?.length || 0,
+    total_found: j.totalFound || 0,
     error: j.error,
     progress: j.progress,
+    current_query: j.currentQuery,
     created_at: j.createdAt,
     started_at: j.startedAt,
     completed_at: j.completedAt,
@@ -42,13 +60,16 @@ router.get('/jobs/:id', (req, res) => {
 
   res.json({
     id: job.id,
-    query: job.query,
+    name: job.name,
+    queries: job.queries,
     options: job.options,
     status: job.status,
     results: job.results,
     result_count: job.results?.length || 0,
+    total_found: job.totalFound || 0,
     error: job.error,
     progress: job.progress,
+    current_query: job.currentQuery,
     created_at: job.createdAt,
     started_at: job.startedAt,
     completed_at: job.completedAt,
@@ -133,13 +154,13 @@ router.get('/jobs/:id/download', (req, res) => {
   res.send(csv);
 });
 
-router.post('/jobs/:id/import', (req, res) => {
+router.post('/jobs/:id/import', async (req, res) => {
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   if (job.status !== 'completed') return res.status(400).json({ error: 'Job not completed' });
   if (!job.results?.length) return res.status(400).json({ error: 'No results to import' });
 
-  const { skipDupes = true, selectedIndices } = req.body;
+  const { skipDupes = true, selectedIndices, checkWhatsApp = false } = req.body;
   const db = getDB();
 
   let results = job.results;
@@ -214,14 +235,69 @@ router.post('/jobs/:id/import', (req, res) => {
         insertTag.run(leadId, tag.id);
       }
 
+      if (isMaybeClosed(r)) {
+        let closedTag = findTag.get('MaybeClosed');
+        if (!closedTag) {
+          const tagId = 'tag_' + crypto.randomBytes(4).toString('hex');
+          createTag.run(tagId, 'MaybeClosed', '#a13a3a', now);
+          closedTag = { id: tagId };
+        }
+        insertTag.run(leadId, closedTag.id);
+      }
+
       added++;
     }
   });
 
   importTx();
   logAudit('gmaps_import', 'gmaps_job', job.id, `${added} leads`, { by: req.user?.id, skipped });
-  res.json({ added, skipped, total: results.length });
+
+  let waResults = null;
+  if (checkWhatsApp && added > 0) {
+    try {
+      const toCheck = results.filter(r => r.phone).map(r => normalizePhone(r.phone || '', countryCode)).filter(Boolean);
+      if (toCheck.length > 0 && waCheckPhones && waGetStatus && waGetStatus().ready) {
+        waResults = await waCheckPhones(toCheck);
+        let notWATag = db.prepare('SELECT id FROM tags WHERE name = ?').get('Not WhatsApp');
+        if (!notWATag) {
+          const tagId = 'tag_' + Math.random().toString(36).slice(2, 10);
+          db.prepare('INSERT INTO tags (id, name, color, created_at) VALUES (?, ?, ?, ?)').run(tagId, 'Not WhatsApp', '#a13a3a', Date.now());
+          notWATag = { id: tagId };
+        }
+        const activeLeads = db.prepare("SELECT id, phone FROM leads WHERE status = 'active'").all();
+        for (const r of waResults) {
+          if (!r.exists) {
+            const match = activeLeads.find(l => l.phone.replace(/\D/g, '') === r.phone);
+            if (match) {
+              db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)').run(match.id, notWATag.id);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[gmaps] WhatsApp check failed:', err.message);
+    }
+  }
+
+  res.json({ added, skipped, total: results.length, waResults });
 });
+
+function isMaybeClosed(r) {
+  if (r.status && (String(r.status).toLowerCase().includes('closed') || String(r.status).toLowerCase().includes('permanently'))) return true;
+  if (r.open_hours && typeof r.open_hours === 'object' && Object.keys(r.open_hours).length > 0) {
+    if (Object.values(r.open_hours).every(v => String(v).toLowerCase().includes('closed'))) return true;
+  }
+  if (r.open_hours && typeof r.open_hours === 'object' && Object.keys(r.open_hours).length === 0 &&
+      r.popular_times && typeof r.popular_times === 'object' && Object.keys(r.popular_times).length === 0) return true;
+  if (r.user_reviews && Array.isArray(r.user_reviews) && r.user_reviews.length > 0) {
+    const newest = r.user_reviews.reduce((max, rev) => {
+      const ts = rev.posted_at_unix_micros ? Math.floor(rev.posted_at_unix_micros / 1000) : 0;
+      return ts > max ? ts : max;
+    }, 0);
+    if (newest && newest < Date.now() - 9 * 30 * 24 * 60 * 60 * 1000) return true;
+  }
+  return false;
+}
 
 function normalizePhone(raw, countryCode) {
   if (!raw) return '';

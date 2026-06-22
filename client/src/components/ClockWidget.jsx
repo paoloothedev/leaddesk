@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { GithubLogo, Heart } from '@phosphor-icons/react'
 
 export default function ClockWidget({ timezone }) {
   const [now, setNow] = useState(new Date())
@@ -36,6 +37,15 @@ export default function ClockWidget({ timezone }) {
       <span className="text-sm font-semibold text-zinc-100 tabular-nums tracking-wide">{time}</span>
       <div className="w-px h-4 bg-zinc-700" />
       <span className="text-[11px] text-zinc-400">{date}</span>
+      <div className="w-px h-4 bg-zinc-700" />
+      <a href="https://github.com/paoloothedev/leaddesk" target="_blank" rel="noopener"
+        className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors">
+        <GithubLogo size={13} /> Star
+      </a>
+      <a href="https://paoloothedev.com" target="_blank" rel="noopener"
+        className="text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors">
+        paoloothedev.com
+      </a>
     </div>
   )
 }

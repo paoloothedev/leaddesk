@@ -14,7 +14,6 @@ import LeadModal from './components/LeadModal'
 import Toast from './components/Toast'
 import ClockWidget from './components/ClockWidget'
 import Login from './components/Login'
-import Home from './components/Home'
 import ClientsList from './components/ClientsList'
 import GoogleMapsScraper from './components/GoogleMapsScraper'
 import { getStats, getStages, getTags, getCampaigns, getSettings } from './api'
@@ -25,10 +24,10 @@ const pageVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 }
 
-const VIEWS = ['home', 'dashboard', 'leads', 'clients', 'scraper', 'campaigns', 'dead', 'settings', 'import']
+const VIEWS = ['dashboard', 'leads', 'clients', 'scraper', 'campaigns', 'dead', 'settings', 'import']
 
 export default function App() {
-  const [view, setView] = useState('home')
+  const [view, setView] = useState('dashboard')
   const [refreshId, setRefreshId] = useState(0)
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
@@ -174,14 +173,12 @@ export default function App() {
 
   const renderView = () => {
     switch (view) {
-      case 'home':
-        return <Home goView={goView} />
       case 'dashboard':
         return <Dashboard stats={stats} loadStats={loadStats} refreshId={refreshId} goView={goView} openLeadModal={openLeadModal} />
       case 'leads':
         return <LeadsTable stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} goView={goView} />
       case 'clients':
-        return <ClientsList tags={tags} refreshId={refreshId} showToast={showToast} refresh={refresh} />
+        return <ClientsList stages={stages} tags={tags} refreshId={refreshId} showToast={showToast} refresh={refresh} openLeadModal={openLeadModal} />
       case 'scraper':
         return <GoogleMapsScraper showToast={showToast} refresh={refresh} />
       case 'dead':

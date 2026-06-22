@@ -145,7 +145,13 @@ export default function Campaigns(props) {
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       >
         {activeTab === 'whatsapp' && <WhatsAppTab {...props} />}
-        {activeTab === 'email' && <EmailCampaigns {...props} />}
+        {activeTab === 'email' && (
+          <div className="flex flex-col items-center justify-center py-24 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <EnvelopeSimple size={40} className="text-zinc-300 dark:text-zinc-600 mb-4" />
+            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Coming Soon</h3>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Email campaigns are under development.</p>
+          </div>
+        )}
       </motion.div>
     </div>
   )

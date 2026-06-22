@@ -39,15 +39,16 @@ const itemVariants = {
 }
 
 export default function Dashboard({ stats, loadStats, refreshId, goView, openLeadModal }) {
-  const [dashCards, setDashCards] = useState(null)
+  const [dashCards, setDashCards] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dashboard_cards_config')
+      return saved ? JSON.parse(saved) : null
+    } catch { return null }
+  })
   const [showCustomize, setShowCustomize] = useState(false)
 
   useEffect(() => {
     loadStats()
-    const saved = localStorage.getItem('dashboard_cards_config')
-    if (saved) {
-      try { setDashCards(JSON.parse(saved)) } catch {}
-    }
   }, [loadStats, refreshId])
 
   const { generalCards, stageCards, tagCards } = useMemo(() => {

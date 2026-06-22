@@ -130,6 +130,10 @@ export function getJobs() {
   return request('/jobs');
 }
 
+export function getDailyStatus() {
+  return request('/jobs/daily-status');
+}
+
 export function getJob(id) {
   return request('/jobs/' + id);
 }
@@ -233,8 +237,8 @@ export function addLeadsToEmailCampaign(id, leadIds, count, force) {
 }
 
 // Google Maps Scraper
-export function scrapeGmaps(query, options = {}) {
-  return request('/gmaps/scrape', { method: 'POST', body: JSON.stringify({ query, ...options }) });
+export function scrapeGmaps(data) {
+  return request('/gmaps/scrape', { method: 'POST', body: JSON.stringify(data) });
 }
 
 export function getGmapsJobs() {
@@ -253,7 +257,19 @@ export function importGmapsJob(id, options = {}) {
   return request('/gmaps/jobs/' + id + '/import', { method: 'POST', body: JSON.stringify(options) });
 }
 
-export function downloadGmapsCSV(id, query) {
-  const safeName = (query || 'gmaps-results').replace(/[^a-zA-Z0-9-_ ]/g, '').trim().replace(/\s+/g, '-');
-  window.open(`/api/gmaps/jobs/${id}/download`, '_blank');
+export async function downloadGmapsCSV(id) {
+  const res = await fetch(`/api/gmaps/jobs/${id}/download`, { credentials: 'include' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Download failed' }));
+    throw new Error(err.error || 'Download failed');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = res.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[1] || 'gmaps-results.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { MagnifyingGlass, Trash, Check, ArrowClockwise, DownloadSimple, MapPin, CaretDown, CaretUp, FileCsv } from '@phosphor-icons/react'
+import { MagnifyingGlass, Trash, Check, ArrowClockwise, DownloadSimple, MapPin, CaretDown, CaretUp, FileCsv, Plus } from '@phosphor-icons/react'
 import { scrapeGmaps, getGmapsJobs, getGmapsJob, deleteGmapsJob, importGmapsJob, downloadGmapsCSV } from '../api'
 
 const PRESET_LOCATIONS = [
@@ -8,8 +8,11 @@ const PRESET_LOCATIONS = [
   { name: 'London, UK', geo: '51.5074,-0.1278', zoom: 12, lang: 'en' },
   { name: 'Manchester, UK', geo: '53.4808,-2.2426', zoom: 12, lang: 'en' },
   { name: 'Birmingham, UK', geo: '52.4862,-1.8904', zoom: 12, lang: 'en' },
+  { name: 'Edinburgh, UK', geo: '55.9533,-3.1883', zoom: 12, lang: 'en' },
   { name: 'New York, USA', geo: '40.7128,-74.0060', zoom: 12, lang: 'en' },
+  { name: 'Los Angeles, USA', geo: '34.0522,-118.2437', zoom: 12, lang: 'en' },
   { name: 'Berlin, Germany', geo: '52.5200,13.4050', zoom: 12, lang: 'de' },
+  { name: 'Munich, Germany', geo: '48.1351,11.5820', zoom: 12, lang: 'de' },
   { name: 'Paris, France', geo: '48.8566,2.3522', zoom: 12, lang: 'fr' },
   { name: 'Dubai, UAE', geo: '25.2048,55.2708', zoom: 12, lang: 'en' },
   { name: 'Cairo, Egypt', geo: '30.0444,31.2357', zoom: 12, lang: 'ar' },
@@ -22,19 +25,26 @@ const PRESET_LOCATIONS = [
   { name: 'No Location (Auto)', geo: '', zoom: 0, lang: 'en' },
 ]
 
+const QUICK_KEYWORDS = [
+  'restaurants', 'dentists', 'gyms', 'hotels', 'cafes', 'bakeries',
+  'beauty salons', 'auto repair', 'plumbers', 'electricians',
+  'lawyers', 'real estate agents', 'fitness centers', 'spas',
+]
+
 export default function GoogleMapsScraper({ showToast, refresh }) {
-  const [query, setQuery] = useState('')
-  const [depth, setDepth] = useState(5)
-  const [lang, setLang] = useState('en')
-  const [geo, setGeo] = useState('')
+  const [jobName, setJobName] = useState('')
+  const [keywords, setKeywords] = useState('')
+  const [geoInput, setGeoInput] = useState('51.5074,-0.1278')
   const [zoom, setZoom] = useState(12)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [depth, setDepth] = useState(10)
+  const [lang, setLang] = useState('en')
   const [scraping, setScraping] = useState(false)
   const [jobs, setJobs] = useState([])
   const [selectedJob, setSelectedJob] = useState(null)
   const [jobDetail, setJobDetail] = useState(null)
   const [selectedResults, setSelectedResults] = useState(new Set())
   const [importing, setImporting] = useState(false)
+  const [checkWA, setCheckWA] = useState(false)
 
   const loadJobs = useCallback(async () => {
     try {
@@ -60,31 +70,45 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
     return () => clearInterval(interval)
   }, [selectedJob, loadJobs])
 
-  const handlePresetLocation = (preset) => {
-    setGeo(preset.geo)
-    setZoom(preset.zoom)
-    setLang(preset.lang)
-  }
-
   const handleScrape = async () => {
-    if (!query.trim()) { showToast('Enter a search query.', true); return }
+    const rawLines = keywords.split('\n').map(q => q.trim()).filter(Boolean)
+    if (!rawLines.length) { showToast('Enter at least one keyword.', true); return }
+
+    const queryList = rawLines
+
     setScraping(true)
     try {
-      const opts = { depth, lang }
-      if (geo) {
-        opts.geo = geo
-        opts.zoom = zoom
+      const data = {
+        name: jobName.trim() || queryList[0],
+        queries: queryList,
+        depth,
+        lang,
+        geo: geoInput.trim(),
+        zoom,
       }
-      const res = await scrapeGmaps(query, opts)
+      const res = await scrapeGmaps(data)
       setSelectedJob(res.job_id)
-      const locLabel = geo ? ` near ${geo} (zoom ${zoom})` : ''
-      setJobDetail({ id: res.job_id, status: 'pending', query: query + locLabel })
-      showToast('Scrape job started.')
+      setJobDetail({ id: res.job_id, status: 'pending', name: data.name, queries: data.queries })
+      setJobName('')
+      showToast(`Scrape job started: ${data.name}`)
       loadJobs()
     } catch (err) {
       showToast(err.message || 'Failed to start scrape.', true)
     }
     setScraping(false)
+  }
+
+  const addQuickKeyword = (kw) => {
+    setKeywords(k => k ? k.trim() + '\n' + kw : kw)
+  }
+
+  const handleDownload = async (id) => {
+    try {
+      await downloadGmapsCSV(id)
+      showToast('CSV downloaded.')
+    } catch (err) {
+      showToast(err.message || 'Failed to download.', true)
+    }
   }
 
   const handleDelete = async (id) => {
@@ -103,8 +127,13 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
     setImporting(true)
     try {
       const indices = selectedResults.size > 0 ? [...selectedResults] : undefined
-      const res = await importGmapsJob(selectedJob, { skipDupes: true, selectedIndices: indices })
-      showToast(`Imported ${res.added} leads (${res.skipped} skipped).`)
+      const res = await importGmapsJob(selectedJob, { skipDupes: true, selectedIndices: indices, checkWhatsApp: checkWA })
+      let msg = `Imported ${res.added} leads (${res.skipped} skipped).`
+      if (res.waResults) {
+        const notWA = res.waResults.filter(r => !r.exists).length
+        if (notWA > 0) msg += ` ${notWA} not on WhatsApp.`
+      }
+      showToast(msg)
       if (refresh) refresh()
       setSelectedResults(new Set())
     } catch (err) {
@@ -130,34 +159,84 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
   }
 
   const results = jobDetail?.results || []
+  const queryCount = keywords.split('\n').filter(q => q.trim()).length
 
   return (
     <div className="max-w-[1400px] mx-auto">
       <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 mb-1">Google Maps Scraper</h1>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">Search Google Maps by location and import businesses as leads.</p>
+      <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">Search Google Maps by keywords and import businesses as leads.</p>
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
         className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50 mb-6">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Search</h2>
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">New Scrape Job</h2>
         <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <input type="text" value={query} onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleScrape()}
-              placeholder="e.g. restaurants, dentists, gyms, hotels..."
-              className="flex-1 h-10 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" />
-            <button onClick={handleScrape} disabled={scraping}
-              className="inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98] disabled:opacity-50 shrink-0">
-              {scraping ? <ArrowClockwise size={14} className="animate-spin" /> : <MagnifyingGlass size={14} weight="bold" />}
-              {scraping ? 'Starting...' : 'Scrape'}
-            </button>
+          <div>
+            <label className="block text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Job Name</label>
+            <input type="text" value={jobName} onChange={e => setJobName(e.target.value)}
+              placeholder="e.g. London Restaurants, Dubai Hotels..."
+              className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">
+                <MapPin size={10} className="inline mr-1" /> Coordinates (lat,lon)
+              </label>
+              <input type="text" value={geoInput} onChange={e => setGeoInput(e.target.value)}
+                placeholder="51.5074,-0.1278"
+                className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 font-mono placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40" />
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {PRESET_LOCATIONS.map(p => (
+                  <button key={p.name} onClick={() => { setGeoInput(p.geo); setZoom(p.zoom); if (p.lang) setLang(p.lang) }}
+                    className={`px-2 h-5 rounded text-[9px] font-medium transition-colors ${
+                      geoInput === p.geo
+                        ? 'bg-emerald-500 text-white'
+                        : 'border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/50'
+                    }`}>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Zoom</label>
+              <div className="flex items-center gap-2">
+                <input type="range" min="1" max="21" value={zoom} onChange={e => setZoom(parseInt(e.target.value))}
+                  className="flex-1 accent-emerald-500" />
+                <span className="font-mono text-xs text-zinc-700 dark:text-zinc-300 w-6 text-right">{zoom}</span>
+              </div>
+              <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1">1=world, 6=country, 12=city, 15=street</p>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Quick Keywords</label>
+              <div className="flex flex-wrap gap-1">
+                {QUICK_KEYWORDS.map(kw => (
+                  <button key={kw} onClick={() => addQuickKeyword(kw)}
+                    className="px-2 h-6 rounded text-[10px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors whitespace-nowrap">
+                    {kw}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Keywords (one per line)</label>
+            <textarea value={keywords} onChange={e => setKeywords(e.target.value)} rows={4}
+              placeholder={"restaurants\ndentists\ngyms\nhotels"}
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors font-mono" />
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">
+              {queryCount > 0 ? `${queryCount} keyword${queryCount > 1 ? 's' : ''} will be scraped` : 'Enter keywords to search'}
+              {geoInput.trim() && <span className="text-emerald-600 dark:text-emerald-400 ml-1">@ {geoInput} zoom:{zoom}</span>}
+            </p>
           </div>
 
           <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
             <label className="flex items-center gap-1.5">
               Depth:
-              <input type="range" min="1" max="10" value={depth} onChange={e => setDepth(parseInt(e.target.value))}
-                className="w-20 accent-emerald-500" />
-              <span className="font-mono text-zinc-700 dark:text-zinc-300 w-4">{depth}</span>
+              <input type="range" min="3" max="20" value={depth} onChange={e => setDepth(parseInt(e.target.value))}
+                className="w-24 accent-emerald-500" />
+              <span className="font-mono text-zinc-700 dark:text-zinc-300 w-6 text-right">{depth}</span>
             </label>
             <label className="flex items-center gap-1.5">
               Language:
@@ -174,65 +253,13 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
                 <option value="nl">Dutch</option>
               </select>
             </label>
-            <button onClick={() => setShowAdvanced(!showAdvanced)}
-              className="inline-flex items-center gap-1 px-2 h-6 rounded text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors">
-              <MapPin size={11} />
-              Location
-              {showAdvanced ? <CaretUp size={10} /> : <CaretDown size={10} />}
-            </button>
-            {geo && (
-              <span className="inline-flex items-center gap-1 px-2 h-6 rounded bg-emerald-50 dark:bg-emerald-900/20 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                <MapPin size={10} />
-                {geo} zoom:{zoom}
-              </span>
-            )}
           </div>
 
-          {showAdvanced && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-              className="rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 bg-zinc-50 dark:bg-zinc-900 space-y-3">
-              <div className="flex flex-wrap gap-1.5">
-                {PRESET_LOCATIONS.map(p => (
-                  <button key={p.name} onClick={() => handlePresetLocation(p)}
-                    className={`px-2.5 h-7 rounded-lg text-[11px] font-medium transition-all ${
-                      geo === p.geo
-                        ? 'bg-emerald-500 text-white shadow-sm'
-                        : 'border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/50'
-                    }`}>
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Coordinates (lat,lon)</label>
-                  <input type="text" value={geo} onChange={e => setGeo(e.target.value)}
-                    placeholder="51.5074,-0.1278"
-                    className="w-full h-8 px-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 font-mono placeholder-zinc-400 outline-none focus:ring-1 focus:ring-emerald-500/40" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Zoom Level</label>
-                  <div className="flex items-center gap-2">
-                    <input type="range" min="1" max="21" value={zoom} onChange={e => setZoom(parseInt(e.target.value))}
-                      className="flex-1 accent-emerald-500" />
-                    <span className="font-mono text-xs text-zinc-700 dark:text-zinc-300 w-6 text-right">{zoom}</span>
-                  </div>
-                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-0.5">1=world, 6=country, 12=city, 15=street</p>
-                </div>
-                <div className="flex items-end">
-                  {geo ? (
-                    <button onClick={() => { setGeo(''); setZoom(12) }}
-                      className="h-8 px-3 rounded-lg text-[11px] font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors">
-                      Clear Location
-                    </button>
-                  ) : (
-                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500">No location set — will search Google Maps globally. Set coordinates to target a specific area.</p>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          )}
+          <button onClick={handleScrape} disabled={scraping || !keywords.trim()}
+            className="inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98] disabled:opacity-50">
+            {scraping ? <ArrowClockwise size={14} className="animate-spin" /> : <MagnifyingGlass size={14} weight="bold" />}
+            {scraping ? 'Starting...' : `Scrape${queryCount > 0 ? ` ${queryCount} Keywords` : ''}`}
+          </button>
         </div>
       </motion.div>
 
@@ -242,21 +269,35 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
           <div className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                {jobDetail.query || 'Scrape Results'}
+                {jobDetail.name || jobDetail.queries?.[0] || 'Scrape Results'}
               </h2>
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
                 {jobDetail.status === 'pending' && 'Queued...'}
-                {jobDetail.status === 'running' && (jobDetail.progress?.message || 'Scraping...')}
+                {jobDetail.status === 'running' && (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {jobDetail.progress?.message || jobDetail.current_query || 'Scraping...'}
+                  </span>
+                )}
                 {jobDetail.status === 'completed' && (
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{jobDetail.result_count} records found</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                    {jobDetail.result_count} records found
+                    {jobDetail.queries?.length > 1 && ` from ${jobDetail.queries.length} keywords`}
+                  </span>
                 )}
                 {jobDetail.status === 'failed' && <span className="text-red-500">Failed: {jobDetail.error}</span>}
               </p>
+              {jobDetail.queries?.length > 1 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {jobDetail.queries.map((q, i) => (
+                    <span key={i} className="inline-block px-2 py-0.5 rounded text-[9px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">{q}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {jobDetail.status === 'completed' && jobDetail.result_count > 0 && (
                 <>
-                  <button onClick={() => downloadGmapsCSV(selectedJob, jobDetail.query)}
+                  <button onClick={() => handleDownload(selectedJob)}
                     className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
                     <FileCsv size={12} />
                     Download CSV
@@ -266,6 +307,11 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
                     <DownloadSimple size={12} />
                     {importing ? 'Importing...' : `Import${selectedResults.size > 0 ? ` (${selectedResults.size})` : ' All'}`}
                   </button>
+                  <label className="inline-flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 cursor-pointer select-none">
+                    <input type="checkbox" checked={checkWA} onChange={e => setCheckWA(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-zinc-300 dark:border-zinc-600 text-emerald-500 focus:ring-emerald-500/40" />
+                    Check WhatsApp
+                  </label>
                 </>
               )}
               <button onClick={() => { setSelectedJob(null); setJobDetail(null) }}
@@ -366,15 +412,16 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
                   job.status === 'failed' ? 'bg-red-500' : 'bg-zinc-300 dark:bg-zinc-600'
                 }`} />
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate block">{job.query}</span>
+                  <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate block">{job.name || job.queries?.[0]}</span>
                   <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
                     {job.status}
                     {job.result_count > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-medium"> · {job.result_count} records</span>}
+                    {job.queries?.length > 1 && <span className="text-zinc-400"> · {job.queries.length} keywords</span>}
                     {job.status === 'failed' && job.error && <span className="text-red-500"> · {job.error}</span>}
                   </span>
                 </div>
                 {job.status === 'completed' && job.result_count > 0 && (
-                  <button onClick={(e) => { e.stopPropagation(); downloadGmapsCSV(job.id, job.query) }}
+                  <button onClick={(e) => { e.stopPropagation(); handleDownload(job.id) }}
                     className="p-1.5 rounded text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors shrink-0" title="Download CSV">
                     <FileCsv size={14} />
                   </button>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Pause, Play, Stop, Trash, Broadcast, Clock } from '@phosphor-icons/react'
-import { getJobs, pauseJob, resumeJob, stopJob, deleteJob } from '../api'
+import { getJobs, getDailyStatus, pauseJob, resumeJob, stopJob, deleteJob } from '../api'
 
 const STATUS_COLORS = {
   pending: 'text-blue-600 dark:text-blue-500',
@@ -24,16 +24,22 @@ function fmtDate(ts) {
 
 export default function BroadcastJobs({ showToast }) {
   const [jobs, setJobs] = useState([])
+  const [daily, setDaily] = useState(null)
 
   const loadJobs = useCallback(async () => {
     try { const data = await getJobs(); setJobs(data) } catch {}
   }, [])
 
+  const loadDaily = useCallback(async () => {
+    try { const data = await getDailyStatus(); setDaily(data) } catch {}
+  }, [])
+
   useEffect(() => {
     loadJobs()
-    const id = setInterval(loadJobs, 3000)
+    loadDaily()
+    const id = setInterval(() => { loadJobs(); loadDaily() }, 3000)
     return () => clearInterval(id)
-  }, [loadJobs])
+  }, [loadJobs, loadDaily])
 
   const handlePause = async (id) => {
     try { await pauseJob(id); showToast('Job paused.') }
@@ -59,6 +65,37 @@ export default function BroadcastJobs({ showToast }) {
 
   return (
     <div className="max-w-[1400px] mx-auto">
+      {daily && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 p-4"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Daily Limit</span>
+            <span className="text-xs font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{daily.sent} / {daily.limit}</span>
+          </div>
+          <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${(daily.sent / daily.limit) * 100}%` }}
+              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              className={`h-full rounded-full ${
+                daily.sent / daily.limit < 0.5 ? 'bg-emerald-500' :
+                daily.sent / daily.limit < 0.8 ? 'bg-amber-500' : 'bg-red-500'
+              }`}
+            />
+          </div>
+          <div className="flex justify-between mt-1.5">
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{daily.remaining} remaining</span>
+            <span className={`text-[10px] font-medium ${
+              daily.remaining === 0 ? 'text-red-500' : daily.sent / daily.limit >= 0.8 ? 'text-amber-500' : 'text-emerald-500'
+            }`}>
+              {daily.remaining === 0 ? 'Limit reached — resumes tomorrow' : daily.sent === 0 ? 'Ready to send' : `${Math.round((daily.sent / daily.limit) * 100)}% used`}
+            </span>
+          </div>
+        </motion.div>
+      )}
       <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 overflow-hidden">
         {jobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">

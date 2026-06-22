@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { io } from 'socket.io-client'
-import { WhatsappLogo, Plugs, PlugsConnected, SignOut } from '@phosphor-icons/react'
+import { WhatsappLogo, Plugs, PlugsConnected, SignOut, Warning } from '@phosphor-icons/react'
 
 export default function WhatsAppPage({ showToast }) {
   const [socket, setSocket] = useState(null)
   const [waStatus, setWaStatus] = useState('disconnected')
   const [qr, setQR] = useState(null)
+  const [restrictionReason, setRestrictionReason] = useState(null)
   const socketRef = useRef(null)
 
   useEffect(() => {
@@ -16,6 +17,7 @@ export default function WhatsAppPage({ showToast }) {
     s.on('wa_status', (status) => {
       setWaStatus(status.status)
       setQR(status.qr)
+      setRestrictionReason(status.restrictionReason || null)
     })
     return () => { s.disconnect() }
   }, [])
@@ -33,6 +35,7 @@ export default function WhatsAppPage({ showToast }) {
     connecting: { dot: 'bg-blue-500', label: 'Connecting...', icon: WhatsappLogo },
     connected: { dot: 'bg-emerald-500', label: 'Connected', icon: PlugsConnected },
     error: { dot: 'bg-red-500', label: 'Error', icon: Plugs },
+    restricted: { dot: 'bg-red-500', label: 'Restricted', icon: Warning },
   }
 
   const config = statusConfig[waStatus] || statusConfig.disconnected
@@ -53,6 +56,22 @@ export default function WhatsAppPage({ showToast }) {
           <span className="text-sm text-zinc-900 dark:text-zinc-100">{config.label}</span>
         </div>
 
+        {waStatus === 'restricted' && restrictionReason && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4"
+          >
+            <div className="flex items-start gap-2.5">
+              <Warning size={16} className="text-red-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">Account Restricted</p>
+                <p className="text-xs text-red-600 dark:text-red-300 leading-relaxed">{restrictionReason}</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {waStatus === 'qr_ready' && qr && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -64,14 +83,14 @@ export default function WhatsAppPage({ showToast }) {
           </motion.div>
         )}
 
-        {waStatus !== 'connected' && (
+        {waStatus !== 'connected' && waStatus !== 'restricted' && (
           <button onClick={handleInit}
             className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
             <PlugsConnected size={14} weight="fill" />
             {waStatus === 'disconnected' ? 'Connect WhatsApp' : 'Retry'}
           </button>
         )}
-        {waStatus === 'connected' && (
+        {(waStatus === 'connected' || waStatus === 'restricted') && (
           <div className="flex items-center gap-2">
             <button onClick={handleDisconnect}
               className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors active:scale-[0.98]">

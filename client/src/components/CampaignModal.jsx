@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { X, Copy, Plus, Trash, CaretRight, PaperPlaneTilt } from '@phosphor-icons/react'
-import { getCampaigns, deleteCampaign, addLeadsToCampaign, removeLeadFromCampaign } from '../api'
+import { getCampaigns, deleteCampaign, addLeadsToCampaign, removeLeadFromCampaign, bulkAction } from '../api'
 import WhatsAppSend from './WhatsAppSend'
 
 export default function CampaignModal({ campId, stages, close, showToast, refresh, openLeadModal }) {
@@ -80,6 +80,19 @@ export default function CampaignModal({ campId, stages, close, showToast, refres
     } catch { showToast('Failed to remove lead.', true) }
   }
 
+  const handleConvertAll = async () => {
+    if (!campaign) return
+    const leads = campaign.leads || []
+    if (!leads.length) { showToast('No leads to convert.', true); return }
+    if (!confirm(`Convert ${leads.length} leads to CRM clients?`)) return
+    try {
+      const ids = leads.map(l => l.id)
+      await bulkAction(ids, 'convert')
+      showToast(`Converted ${ids.length} leads to CRM clients.`)
+      refresh()
+    } catch { showToast('Failed to convert leads.', true) }
+  }
+
   const getStage = (id) => stages.find(s => s.id === id)
 
   if (loading || !campaign) return null
@@ -116,6 +129,9 @@ export default function CampaignModal({ campId, stages, close, showToast, refres
                 Send WhatsApp
               </button>
             )}
+            <button onClick={handleConvertAll} className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-[11px] font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors active:scale-[0.98]">
+              Convert all to CRM
+            </button>
             <button onClick={handleDelete} className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-[11px] font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.98] ml-auto">
               <Trash size={14} />
               Delete campaign

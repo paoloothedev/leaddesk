@@ -1,11 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChartLine, Users, Skull, Megaphone, GearSix, Upload,
-  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, House, MagnifyingGlass
+  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo
 } from '@phosphor-icons/react'
 
 const NAV_ITEMS = [
-  { id: 'home', label: 'Home', icon: House },
   { id: 'dashboard', label: 'Dashboard', icon: ChartLine },
   { id: 'leads', label: 'All Leads', icon: Users },
   { id: 'clients', label: 'Clients', icon: UserCircle },
@@ -140,25 +139,21 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
           </div>
         )}
 
-        <AnimatePresence>
-          {stats && !sidebarCollapsed && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="px-5 py-4 border-t border-zinc-800 space-y-2.5 shrink-0 overflow-hidden"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-zinc-500">Untagged</span>
-                <span className="text-[11px] font-medium text-zinc-200">{stats.verifiedNoTags}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-zinc-500">No Campaign</span>
-                <span className="text-[11px] font-medium text-zinc-200">{stats.verifiedNoTagsNoCampaign}</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className={`px-2 pb-2 border-t border-zinc-800 pt-2 ${sidebarCollapsed ? 'hidden' : ''}`}>
+          <div className="px-3 py-2 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <a href="https://github.com/paoloothedev/leaddesk" target="_blank" rel="noopener"
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1">
+                <GithubLogo size={11} /> v1.0.0
+              </a>
+            </div>
+            <div className="text-[10px] text-zinc-600">
+              by <a href="https://paoloothedev.com" target="_blank" rel="noopener" className="text-zinc-500 hover:text-emerald-400 transition-colors">PaoloTheDev</a>
+            </div>
+          </div>
+        </div>
+
+
       </motion.aside>
     </>
   )

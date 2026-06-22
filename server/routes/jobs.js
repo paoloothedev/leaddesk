@@ -17,16 +17,15 @@ function randomBetween(min, max) {
 }
 
 function getMessageDelay(index) {
-  if (index < 3) return randomBetween(90, 180) * 1000;
-  if (index < 10) return randomBetween(60, 120) * 1000;
-  if (index < 25) return randomBetween(45, 90) * 1000;
-  return randomBetween(40, 80) * 1000;
+  return randomBetween(30, 75) * 1000;
 }
 
 function shouldTakeBreak(index) {
-  if (index < 5) return false;
-  const cycle = 8 + Math.floor(Math.random() * 8);
-  return index % cycle === 0;
+  return index > 0 && index % 10 === 0;
+}
+
+function getBreakDuration() {
+  return randomBetween(60, 180) * 1000;
 }
 
 function resetDailyCount() {
@@ -63,6 +62,10 @@ router.get('/', (req, res) => {
   const db = getDB();
   const jobs = db.prepare('SELECT * FROM broadcast_jobs ORDER BY created_at DESC').all();
   res.json(jobs);
+});
+
+router.get('/daily-status', (req, res) => {
+  res.json({ sent: messagesSentToday, limit: DAILY_LIMIT, remaining: DAILY_LIMIT - messagesSentToday });
 });
 
 router.get('/:id', (req, res) => {
@@ -117,7 +120,7 @@ router.delete('/:id', (req, res) => {
 
 function processNextJob() {
   const db = getDB();
-  const job = db.prepare("SELECT * FROM broadcast_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1").get();
+  const job = db.prepare("SELECT * FROM broadcast_jobs WHERE status = 'pending' OR status = 'running' ORDER BY created_at ASC LIMIT 1").get();
   if (!job) {
     processingJobId = null;
     return;
@@ -181,17 +184,32 @@ async function runJob(jobId) {
       messageIndex++;
       console.log(`[wa] Sent ${messageIndex}/${job.total} to ${phone}`);
     } catch (err) {
-      consecutiveFails++;
-      db.prepare("UPDATE job_leads SET status = 'failed', error = ? WHERE id = ?").run(err.message || 'Send failed', lead.id);
-      db.prepare("UPDATE broadcast_jobs SET failed = failed + 1 WHERE id = ?").run(jobId);
-      console.log(`[wa] Failed to ${phone}: ${err.message} (consecutive: ${consecutiveFails})`);
-
-      if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) {
-        console.log(`[wa] ${MAX_CONSECUTIVE_FAILS} consecutive failures. Pausing job for 30 minutes.`);
+      const isRestricted = err.message.startsWith('Account restricted');
+      const isNotOnWhatsApp = err.message === 'Number not on WhatsApp';
+      if (isRestricted) {
+        db.prepare("UPDATE job_leads SET status = 'failed', error = ? WHERE id = ?").run('Account restricted', lead.id);
         db.prepare("UPDATE broadcast_jobs SET status = 'paused' WHERE id = ?").run(jobId);
         processingJobId = null;
-        scheduleProcessor(30 * 60 * 1000);
+        console.log(`[wa] Account restricted — pausing job. ${err.message}`);
         return;
+      } else if (isNotOnWhatsApp) {
+        db.prepare("UPDATE job_leads SET status = 'failed', error = ? WHERE id = ?").run('Not on WhatsApp', lead.id);
+        db.prepare("UPDATE broadcast_jobs SET failed = failed + 1 WHERE id = ?").run(jobId);
+        messageIndex++;
+        console.log(`[wa] ${phone}: not on WhatsApp, skipping`);
+      } else {
+        consecutiveFails++;
+        db.prepare("UPDATE job_leads SET status = 'failed', error = ? WHERE id = ?").run(err.message || 'Send failed', lead.id);
+        db.prepare("UPDATE broadcast_jobs SET failed = failed + 1 WHERE id = ?").run(jobId);
+        console.log(`[wa] Failed to ${phone}: ${err.message} (consecutive: ${consecutiveFails})`);
+
+        if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) {
+          console.log(`[wa] ${MAX_CONSECUTIVE_FAILS} consecutive failures. Pausing job for 30 minutes.`);
+          db.prepare("UPDATE broadcast_jobs SET status = 'paused' WHERE id = ?").run(jobId);
+          processingJobId = null;
+          scheduleProcessor(30 * 60 * 1000);
+          return;
+        }
       }
     }
 
@@ -202,8 +220,8 @@ async function runJob(jobId) {
     }
 
     if (shouldTakeBreak(messageIndex)) {
-      const breakMs = randomBetween(300000, 900000);
-      console.log(`[wa] Taking a ${(breakMs / 1000 / 60).toFixed(1)} minute break after ${messageIndex} messages`);
+      const breakMs = getBreakDuration();
+      console.log(`[wa] Taking a ${(breakMs / 1000).toFixed(0)}s rest after ${messageIndex} messages`);
       await new Promise(r => setTimeout(r, breakMs));
     } else {
       const delayMs = getMessageDelay(messageIndex);

@@ -135,16 +135,19 @@ async function extractPlaceData(page) {
 }
 
 async function scrapeGmaps(query, options = {}) {
-  const { depth = 5, lang = 'en', geo = '', zoom = 0, onProgress } = options;
+  const { depth = 10, lang = 'en', geo = '', zoom = 0, onProgress } = options;
 
   let searchURL;
   if (query.startsWith('http')) {
     searchURL = query;
   } else {
-    // Don't use @geo,zoom format - Google Maps overrides it in headless mode
-    // Instead, let Google infer location from query text
-    const encoded = query.replace(/ /g, '+');
-    searchURL = `https://www.google.com/maps/search/${encoded}?hl=${lang}`;
+    const encoded = encodeURIComponent(query);
+    if (geo && zoom > 0) {
+      const [lat, lon] = geo.split(',').map(s => s.trim());
+      searchURL = `https://www.google.com/maps/search/${encoded}/@${lat},${lon},${zoom}z?hl=${lang}`;
+    } else {
+      searchURL = `https://www.google.com/maps/search/${encoded}?hl=${lang}`;
+    }
   }
 
   console.log(`[gmaps] Starting: ${searchURL}`);
@@ -154,9 +157,9 @@ async function scrapeGmaps(query, options = {}) {
   try {
     onProgress?.({ phase: 'navigating', message: 'Opening Google Maps...' });
     await page.goto(searchURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await sleep(4000);
+    await sleep(6000);
     await page.evaluate(COOKIE_REJECT_JS).catch(() => {});
-    await sleep(2000);
+    await sleep(3000);
 
     const currentUrl = page.url();
     console.log(`[gmaps] URL: ${currentUrl}`);
@@ -169,30 +172,54 @@ async function scrapeGmaps(query, options = {}) {
 
     onProgress?.({ phase: 'scrolling', message: 'Loading results...' });
     try {
-      await page.waitForSelector("div[role='feed']", { timeout: 20000 });
+      await page.waitForSelector("div[role='feed'], div.m6QErb.DxyBCb.kA9KIf.dS8AEf.XiGgJb", { timeout: 25000 });
     } catch {
-      console.log('[gmaps] Feed not found');
-      return [];
+      console.log('[gmaps] Feed not found, trying alternative selectors...');
+      try {
+        await page.waitForSelector('[data-result-index], a[href*="/maps/place/"], div.Nv2PK', { timeout: 10000 });
+      } catch {
+        console.log('[gmaps] No results feed or place links found');
+        return [];
+      }
     }
 
-    // Wait a bit for initial results to render
     await sleep(3000);
 
-    // Scroll to load more
+    // Scroll aggressively to load all results
     let prevHeight = 0;
     let stable = 0;
+    const maxStable = 4;
     for (let i = 0; i < depth; i++) {
       const height = await page.evaluate(() => {
-        const el = document.querySelector("div[role='feed']");
+        const el = document.querySelector("div[role='feed']") || document.querySelector('div.m6QErb.DxyBCb.kA9KIf.dS8AEf.XiGgJb') || document.querySelector('[role="main"]');
         if (!el) return 0;
         el.scrollTop = el.scrollHeight;
         return el.scrollHeight;
       }).catch(() => 0);
-      console.log(`[gmaps] Scroll ${i+1}: h=${height}`);
-      if (height === prevHeight) { stable++; if (stable >= 2) break; } else stable = 0;
+
+      const links = await page.evaluate(() => {
+        return document.querySelectorAll('a[href*="/maps/place/"]').length;
+      }).catch(() => 0);
+
+      console.log(`[gmaps] Scroll ${i+1}: h=${height}, links=${links}`);
+      onProgress?.({ phase: 'scrolling', message: `Scrolling... ${links} results found (${i + 1}/${depth})` });
+
+      if (height === prevHeight) {
+        stable++;
+        if (stable >= maxStable) break;
+      } else {
+        stable = 0;
+      }
       prevHeight = height;
-      onProgress?.({ phase: 'scrolling', message: `Scrolling... (${i + 1}/${depth})` });
-      await sleep(1500 + Math.random() * 1000);
+      await sleep(2000 + Math.random() * 1500);
+
+      if (i === Math.floor(depth / 2)) {
+        await page.evaluate(() => {
+          const el = document.querySelector("div[role='feed']") || document.querySelector('div.m6QErb.DxyBCb.kA9KIf.dS8AEf.XiGgJb') || document.querySelector('[role="main"]');
+          if (el) el.scrollTop = 0;
+        }).catch(() => {});
+        await sleep(2000);
+      }
     }
 
     // Collect ALL place links on the entire page

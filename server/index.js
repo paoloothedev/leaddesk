@@ -23,6 +23,14 @@ process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err?.message || err);
 });
 
+const shutdown = async () => {
+  console.log('Shutting down, cleaning up WhatsApp...');
+  try { await destroyClient(); } catch {}
+  process.exit(0);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server, { cors: { origin: '*' } });

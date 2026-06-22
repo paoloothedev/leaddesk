@@ -1,19 +1,23 @@
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
+import pino from 'pino';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AUTH_DIR = path.join(__dirname, '.wwebjs_auth');
+const AUTH_DIR = path.join(__dirname, 'baileys_auth');
 
-let client = null;
-let clientReady = false;
+let sock = null;
+let sockReady = false;
 let qrData = null;
-let currentStatus = 'disconnected'; // disconnected | qr_ready | connecting | connected | error
+let currentStatus = 'disconnected';
+let restrictionReason = null;
 let statusListeners = [];
 let messageListeners = [];
+let intentionalDisconnect = false;
+let reconnectTimer = null;
 
 function notifyStatus() {
   for (const fn of statusListeners) fn(currentStatus, qrData);
@@ -25,7 +29,7 @@ export function onStatusChange(fn) {
 }
 
 export function getStatus() {
-  return { status: currentStatus, qr: qrData, ready: clientReady };
+  return { status: currentStatus, qr: qrData, ready: sockReady, restricted: currentStatus === 'restricted', restrictionReason };
 }
 
 export function onMessage(fn) {
@@ -33,163 +37,190 @@ export function onMessage(fn) {
   return () => { messageListeners = messageListeners.filter(f => f !== fn); };
 }
 
-function cleanChromeLocks() {
-  try {
-    const files = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
-    const sessionDirs = fs.readdirSync(AUTH_DIR).filter(d => d.startsWith('session'));
-    for (const dir of sessionDirs) {
-      for (const f of files) {
-        const p = path.join(AUTH_DIR, dir, f);
-        try { fs.unlinkSync(p); } catch {}
-      }
-    }
-  } catch {}
-}
-
-export async function initClient() {
-  if (client) {
-    try { await client.destroy(); } catch {}
-    client = null;
-  }
-  clientReady = false;
-  qrData = null;
-  currentStatus = 'connecting';
-  notifyStatus();
-
-  cleanChromeLocks();
-
-  client = new Client({
-    authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
-    takeoverOnConflict: true,
-    takeoverTimeoutMs: 0,
-    puppeteer: {
-      headless: true,
-      protocolTimeout: 120000,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-      ],
-    },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  });
-
-  client.on('qr', async (qr) => {
-    try {
-      qrData = await qrcode.toDataURL(qr);
-    } catch {
-      qrData = 'data:image/png;base64,';
-    }
-    currentStatus = 'qr_ready';
-    notifyStatus();
-  });
-
-  client.on('authenticated', () => {
-    currentStatus = 'connecting';
-    notifyStatus();
-  });
-
-  client.on('ready', () => {
-    clientReady = true;
-    qrData = null;
-    currentStatus = 'connected';
-    notifyStatus();
-  });
-
-  client.on('disconnected', (reason) => {
-    clientReady = false;
-    currentStatus = 'disconnected';
-    notifyStatus();
-    // Auto-reconnect
-    setTimeout(() => initClient(), 5000);
-  });
-
-  client.on('auth_failure', () => {
-    clientReady = false;
-    currentStatus = 'error';
-    notifyStatus();
-    // Clean up stale session and retry
-    try {
-      const dirs = fs.readdirSync(AUTH_DIR).filter(d => d.startsWith('session'));
-      for (const d of dirs) fs.rmSync(path.join(AUTH_DIR, d), { recursive: true, force: true });
-    } catch {}
-  });
-
-  client.on('error', (err) => {
-    console.error('WhatsApp client error:', err?.message || err);
-    clientReady = false;
-    currentStatus = 'error';
-    notifyStatus();
-    setTimeout(() => initClient(), 5000);
-  });
-
-  client.on('message', (msg) => {
-    for (const fn of messageListeners) fn(msg);
-  });
-
-  try {
-    await client.initialize();
-  } catch (err) {
-    console.error('WhatsApp init failed:', err?.message || err);
-    currentStatus = 'error';
-    notifyStatus();
-    setTimeout(() => initClient(), 10000);
-  }
-}
-
-export async function sendMessage(phone, text) {
-  if (!client || !clientReady) throw new Error('WhatsApp not connected');
-  const jid = phone.includes('@') ? phone : phone.replace(/\D/g, '') + '@c.us';
-  await client.sendMessage(jid, text);
-}
-
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-function addMessageVariation(text) {
-  const zwsp = ['\u200B', '\u200C', '\u200D', '\uFEFF'];
-  let result = '';
-  for (const char of text) {
-    result += char;
-    if (Math.random() < 0.12) {
-      result += zwsp[Math.floor(Math.random() * zwsp.length)];
-    }
+function parseSpintax(text) {
+  return text.replace(/\{([^{}]*)\}/g, (match, group) => {
+    const options = group.split('|');
+    return options[Math.floor(Math.random() * options.length)];
+  });
+}
+
+export async function initClient() {
+  intentionalDisconnect = false;
+  if (sock) {
+    try { sock.end(null); } catch {}
+    sock = null;
   }
-  return result;
+  sockReady = false;
+  qrData = null;
+  currentStatus = 'connecting';
+  notifyStatus();
+
+  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+
+  sock = makeWASocket({
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, undefined),
+    },
+    browser: ['Ubuntu', 'Chrome', '20.0.04'],
+    printQRInTerminal: true,
+    generateHighQualityLinkPreview: false,
+    syncFullHistory: false,
+    markOnlineOnConnect: false,
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: undefined,
+    retryRequestDelayMs: 250,
+    maxRetries: 4,
+    logger: pino({ level: 'silent' }),
+  });
+
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      try {
+        qrData = await qrcode.toDataURL(qr);
+      } catch {
+        qrData = 'data:image/png;base64,';
+      }
+      currentStatus = 'qr_ready';
+      restrictionReason = null;
+      notifyStatus();
+      console.log('[wa] QR code received — scan with your phone');
+    }
+
+    if (connection === 'close') {
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const errorMsg = lastDisconnect?.error?.message || '';
+      console.log(`[wa] Connection closed. Status: ${statusCode}. Error: ${errorMsg}`);
+
+      sockReady = false;
+
+      if (statusCode === 401 || errorMsg.includes('restricted') || errorMsg.includes('logged out')) {
+        currentStatus = 'restricted';
+        restrictionReason = 'Your account on linked devices is restricted. This usually lasts 24-72 hours for new or flagged Business accounts. Wait for the restriction to lift, or use a regular WhatsApp account.';
+        notifyStatus();
+        console.log('[wa] Account restricted — pausing all activity');
+        return;
+      }
+
+      currentStatus = 'disconnected';
+      restrictionReason = null;
+      notifyStatus();
+
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      if (shouldReconnect && !intentionalDisconnect) {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(() => initClient(), 5000);
+      } else if (statusCode === DisconnectReason.loggedOut) {
+        console.log('[wa] Logged out — clearing auth state');
+        try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch {}
+        currentStatus = 'disconnected';
+        notifyStatus();
+      }
+    }
+
+    if (connection === 'open') {
+      sockReady = true;
+      qrData = null;
+      restrictionReason = null;
+      currentStatus = 'connected';
+      notifyStatus();
+      console.log('[wa] Connected to WhatsApp');
+    }
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+    for (const msg of messages) {
+      if (msg.key.fromMe) continue;
+      const body = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+      const from = msg.key.remoteJid;
+
+      const lowerBody = body.toLowerCase();
+      if (lowerBody.includes('restricted') || lowerBody.includes('limit') || lowerBody.includes('suspended')) {
+        console.log(`[wa] RESTRICTION detected in message: ${body}`);
+        currentStatus = 'restricted';
+        restrictionReason = body;
+        notifyStatus();
+      }
+
+      for (const fn of messageListeners) fn({ from, body, msg });
+    }
+  });
+
+  sock.ev.on('messages.update', (messages) => {
+    for (const msg of messages) {
+      if (msg.update.status) {
+        const ack = msg.update.status;
+        const id = msg.key?.id || 'unknown';
+        console.log(`[wa] message_ack: ${msg.key?.remoteJid || 'unknown'} msgId: ${id} ack: ${ack}`);
+      }
+    }
+  });
+
+  console.log('[wa] Initializing Baileys client...');
+}
+
+export async function sendMessage(phone, text) {
+  if (!sock || !sockReady) throw new Error('WhatsApp not connected');
+  if (currentStatus === 'restricted') throw new Error('Account restricted: ' + (restrictionReason || 'Linked device restricted by WhatsApp'));
+  const cleaned = phone.replace(/\D/g, '');
+  const jid = cleaned + '@s.whatsapp.net';
+
+  try { await sock.sendPresenceUpdate('available'); } catch {}
+  await sleep(1000 + Math.random() * 2000);
+
+  try { await sock.sendPresenceUpdate('composing', jid); } catch {}
+  const typingDuration = Math.max(3000, text.length * 25);
+  await sleep(typingDuration);
+
+  const varied = parseSpintax(text);
+  await sock.sendMessage(jid, { text: varied });
+
+  try { await sock.sendPresenceUpdate('paused', jid); } catch {}
+  await sleep(2000 + Math.random() * 2000);
+
+  try { await sock.sendPresenceUpdate('unavailable'); } catch {}
 }
 
 export async function sendHumanMessage(phone, text) {
-  if (!client || !clientReady) throw new Error('WhatsApp not connected');
-  const jid = phone.replace(/\D/g, '') + '@c.us';
+  if (!sock || !sockReady) throw new Error('WhatsApp not connected');
+  if (currentStatus === 'restricted') throw new Error('Account restricted: ' + (restrictionReason || 'Linked device restricted by WhatsApp'));
+  const cleaned = phone.replace(/\D/g, '');
+  const jid = cleaned + '@s.whatsapp.net';
 
-  try { await client.sendPresenceAvailable(); } catch {}
-  await sleep(1000 + Math.random() * 2000);
-
-  try { await client.sendSeen(jid); } catch {}
   await sleep(2000 + Math.random() * 3000);
 
-  await sleep(2000 + Math.random() * 4000);
+  try { await sock.sendPresenceUpdate('available'); } catch {}
+  await sleep(1000 + Math.random() * 2000);
 
-  const varied = addMessageVariation(text);
-  await client.sendMessage(jid, varied);
+  try { await sock.sendPresenceUpdate('composing', jid); } catch {}
+  const typingDuration = Math.max(3000, text.length * 25);
+  await sleep(typingDuration);
 
-  await sleep(1500 + Math.random() * 2500);
-  try { await client.sendPresenceUnavailable(); } catch {}
+  const varied = parseSpintax(text);
+  const sentMsg = await sock.sendMessage(jid, { text: varied });
+  const msgId = sentMsg?.key?.id || 'unknown';
+  console.log(`[wa] Sent to ${jid}, msgId: ${msgId}`);
 
-  return true;
+  try { await sock.sendPresenceUpdate('paused', jid); } catch {}
+  await sleep(2000 + Math.random() * 3000);
+
+  try { await sock.sendPresenceUpdate('unavailable'); } catch {}
+  await sleep(1000 + Math.random() * 1500);
+
+  return sentMsg;
 }
 
 export async function checkPhones(phones) {
-  if (!client || !clientReady) throw new Error('WhatsApp not connected');
+  if (!sock || !sockReady) throw new Error('WhatsApp not connected');
   const results = [];
   for (const phone of phones) {
     const cleaned = phone.replace(/\D/g, '');
@@ -198,9 +229,8 @@ export async function checkPhones(phones) {
       continue;
     }
     try {
-      const jid = cleaned + '@c.us';
-      const exists = await client.isRegisteredUser(jid);
-      results.push({ phone: cleaned, exists, error: null });
+      const [exists] = await sock.onWhatsApp(cleaned + '@s.whatsapp.net');
+      results.push({ phone: cleaned, exists: exists || false, error: null });
     } catch (err) {
       results.push({ phone: cleaned, exists: false, error: err.message });
     }
@@ -209,33 +239,32 @@ export async function checkPhones(phones) {
 }
 
 export async function destroyClient() {
-  if (client) {
-    try { await client.destroy(); } catch {}
-    client = null;
-    clientReady = false;
+  intentionalDisconnect = true;
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  if (sock) {
+    try { sock.end(null); } catch {}
+    sock = null;
+    sockReady = false;
     currentStatus = 'disconnected';
     notifyStatus();
   }
 }
 
 export async function logoutClient() {
-  if (client) {
-    try { await client.destroy(); } catch {}
-    client = null;
-    clientReady = false;
+  intentionalDisconnect = true;
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  if (sock) {
+    try { sock.logout(); } catch {}
+    try { sock.end(null); } catch {}
+    sock = null;
+    sockReady = false;
   }
   qrData = null;
   currentStatus = 'disconnected';
   notifyStatus();
-  try {
-    const sessionDir = path.join(AUTH_DIR, 'session');
-    if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
-  } catch {}
-  cleanChromeLocks();
+  try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch {}
 }
 
 export function formatPhoneForWA(phone) {
   return phone.replace(/\D/g, '');
 }
-
-

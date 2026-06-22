@@ -1,0 +1,16 @@
+services:
+  leaddesk:
+    build: .
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      - PORT=3001
+      - HOST=0.0.0.0
+    volumes:
+      - leaddesk-data:/app/server/leaddesk.db
+      - leaddesk-wa:/app/server/baileys_auth
+    restart: unless-stopped
+
+volumes:
+  leaddesk-data:
+  leaddesk-wa:

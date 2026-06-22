@@ -2,3 +2,11 @@ node_modules/
 server/leaddesk.db*
 server/public/
 client/dist/
+server/baileys_auth/
+server/.wwebjs_auth/
+.wwebjs_cache/
+.mimocode/
+server/accounts.json
+server/gmaps/jobs_data.json
+.env
+*.log

@@ -245,6 +245,10 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
               <Trash size={12} className="mr-1.5" />
               Delete
             </button>
+            <button onClick={() => doBulk('convert')}
+              className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 transition-colors active:scale-[0.98]">
+              Convert to CRM
+            </button>
             <button onClick={() => setShowBulkCampaign(!showBulkCampaign)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Add to campaign...
