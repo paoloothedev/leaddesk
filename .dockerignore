@@ -1,0 +1,12 @@
+node_modules
+client/node_modules
+server/node_modules
+client/dist
+server/public
+server/leaddesk.db*
+server/baileys_auth
+.git
+.mimocode
+*.md
+*.log
+.env

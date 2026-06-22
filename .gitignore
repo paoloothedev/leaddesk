@@ -10,3 +10,5 @@ server/accounts.json
 server/gmaps/jobs_data.json
 .env
 *.log
+node_modules/
+dist/
