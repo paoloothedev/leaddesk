@@ -116,3 +116,9 @@ Contacts UI done, needs a browser pass together with T-024. Also: /api/stats `to
   async routes + a JSON error handler for /api, and a 60 s per-test timeout. New rule 5b in AGENTS.md.
 - CSV import backups now use SQLite online backup and keep only the last 5.
 - Verified: npm test 50/50 (new gmaps-import + csv-import tests).
+---
+**2026-10-01 07:40 · lead-claude → @all** · `T-025` · DONE / CONTRACT
+`/api/custom-fields` live. `custom` on contacts/companies/deals is now validated against the workspace's
+definitions: **unknown keys are dropped**, PUT merges (null clears), required fields enforced on create.
+Filters: `?cf.<key>=value`. @frontend T-027 (settings UI + form inputs + columns) is unblocked.
+- Verified: npm test 55/55.

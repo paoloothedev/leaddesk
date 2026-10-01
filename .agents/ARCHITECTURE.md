@@ -65,6 +65,7 @@ Scoped by `project_id` (see `SCOPED_TABLES` in `db.js`):
 | `import_logs` | id, filename, rows_total, added, skipped, updated, details | |
 | `audit_log` | action, entity_type, entity_id, entity_name, details(JSON), created_at | via `logAudit()` |
 | `settings` | PK (project_id, key), value | e.g. `country_code` |
+| `custom_fields` | id (`cf_…`), entity (`contact/company/deal`), key, label, type, options (JSON), required, sort_order | Values live in each entity's `custom` JSON; validated by `lib/customFields.js` (migration 009) |
 | `pipelines` | id (`pipe_…`), name, sort_order | Every workspace has ≥1 (default "Sales", `lib/pipelines.js`) |
 | `pipeline_stages` | id (`pst_…`), pipeline_id, name, color, sort_order, probability 0–100, rot_days, kind (`open/won/lost`) | Deal stages (separate from contact outreach `stages`) |
 | `deals` | id (`deal_…`), pipeline_id, stage_id, title, value, currency, contact_id, company_id, owner_id, expected_close, status (`open/won/lost`), lost_reason, won_at, lost_at, notes, source, custom, created_at, updated_at, stage_changed_at | Migration 008 also converted legacy clients into deals (`source='client-migration'`) |
@@ -100,6 +101,7 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/companies` | routes/companies.js | GET / (page/limit, search, owner, industry; items have `contact_count`), GET /:id (+ `contacts`), POST, PUT /:id, DELETE /:id (unlinks contacts), POST /:id/contacts {contactIds}, DELETE /:id/contacts/:contactId |
 | `/pipelines` | routes/pipelines.js | GET / (all pipelines + stages with deal_count/deal_value; any member), POST / {name, stages?}, PUT /:id, DELETE /:id (not last, no deals), POST /:id/stages, PUT /stages/:stageId, DELETE /stages/:stageId?moveTo=, POST /:id/stages/reorder — writes need `settings.edit` |
 | `/deals` | routes/deals.js | GET / (page/limit; pipeline, stage, status, owner, contact, company, search), GET /board?pipeline= (columns with deals + count/total_value/weighted_value), GET /:id (+history), POST, PUT /:id (stage_id change = move), POST /:id/move {stage_id, lost_reason}, DELETE /:id — `deals.*` perms. Moving to a `won` stage makes the contact a `customer`. Items include contact, company, stage, `rotting` |
+| `/custom-fields` | routes/customFields.js | GET / (all entities) or ?entity= (any member), POST {entity,label,type,options,required,key?}, PUT /:id (label/options/required/sort_order), DELETE /:id (also strips stored values) — writes need `settings.edit`. Entity lists accept `?cf.<key>=value` (`__empty` = no value) |
 | `/stages` | routes/stages.js | CRUD (GET includes `lead_count`) + POST /reorder |
 | `/tags` | routes/tags.js | CRUD (GET includes lead_count) |
 | `/templates` | routes/templates.js | CRUD |
@@ -166,6 +168,8 @@ and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin).
 
 ## 5. Conventions cheat-sheet
 
+- Custom fields: entity routes call `validateCustom(projectId, entity, input, existing, { create })` — partial
+  merge, unknown keys dropped, types coerced, required enforced on create. Filters via `customFilterSql()`.
 - Lists: use `lib/paginate.js` (`pageParams`, `runPaged`, `groupBy` for batched enrichment, `sendList`). Never
   run a query per row. New list endpoints should always paginate.
 

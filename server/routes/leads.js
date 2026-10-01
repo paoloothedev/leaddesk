@@ -4,6 +4,7 @@ import { requirePermission, hasPermission } from './auth.js';
 import { getDB, logAudit, DB_PATH } from '../db.js';
 import { ownedIds, isOwned, isProjectMember } from '../lib/scope.js';
 import { pageParams, runPaged, groupBy, sendList } from '../lib/paginate.js';
+import { validateCustom, customFilterSql } from '../lib/customFields.js';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
@@ -28,7 +29,7 @@ export const LIFECYCLES = ['lead', 'qualified', 'customer', 'churned'];
 
 // Validates the contact-level fields (lifecycle, owner, source, custom) present in `body`.
 // Returns { error } or { sets } where sets is a column → value map ready for an UPDATE.
-function contactFields(body, projectId) {
+function contactFields(body, projectId, { existing = {}, create = false } = {}) {
   const sets = {};
   if (body.lifecycle !== undefined) {
     if (!LIFECYCLES.includes(body.lifecycle)) return { error: 'Invalid lifecycle' };
@@ -43,9 +44,10 @@ function contactFields(body, projectId) {
     sets.company_id = body.company_id;
   }
   if (body.source !== undefined) sets.source = String(body.source || '').slice(0, 50);
-  if (body.custom !== undefined) {
-    if (!body.custom || typeof body.custom !== 'object' || Array.isArray(body.custom)) return { error: 'custom must be an object' };
-    sets.custom = JSON.stringify(body.custom);
+  if (body.custom !== undefined || create) {
+    const v = validateCustom(projectId, 'contact', body.custom, existing, { create });
+    if (v.error) return { error: v.error };
+    sets.custom = JSON.stringify(v.value);
   }
   return { sets };
 }
@@ -98,6 +100,9 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
 
   if (company === 'none') { sql += ' AND company_id IS NULL'; }
   else if (company) { sql += ' AND company_id = ?'; params.push(company); }
+
+  const cfFilter = customFilterSql(projectId, 'contact', req.query);
+  sql += cfFilter.sql; params.push(...cfFilter.params);
 
   if (verified === 'yes') { sql += ' AND verified = 1'; }
   else if (verified === 'no') { sql += ' AND verified = 0'; }
@@ -206,7 +211,7 @@ router.post('/', requirePermission('leads.edit'), (req, res) => {
     if (!stage_id) return res.status(400).json({ error: 'Project has no stages' });
   }
   if (id && db.prepare('SELECT 1 FROM leads WHERE id = ?').get(id)) return res.status(409).json({ error: 'Lead id already exists' });
-  const cf = contactFields({ owner_id: req.user.id, source: 'manual', ...req.body }, projectId);
+  const cf = contactFields({ owner_id: req.user.id, source: 'manual', ...req.body }, projectId, { create: true });
   if (cf.error) return res.status(400).json({ error: cf.error });
 
   const leadId = id || 'lead_' + Math.random().toString(36).slice(2, 10);
@@ -246,7 +251,7 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
 
   const { name, phone, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, tag_ids } = req.body;
   if (stage_id && !isOwned('stages', req.project.id, stage_id)) return res.status(400).json({ error: 'Invalid stage' });
-  const cf = contactFields(req.body, req.project.id);
+  const cf = contactFields(req.body, req.project.id, { existing: parseCustom(existing) });
   if (cf.error) return res.status(400).json({ error: cf.error });
   const phoneValid = phone !== undefined ? (isValidPhone(phone) ? 1 : 0) : existing.phone_valid;
   const stageChanged = stage_id && stage_id !== existing.stage_id;

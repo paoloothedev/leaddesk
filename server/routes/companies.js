@@ -4,6 +4,7 @@ import { requirePermission } from './auth.js';
 import { getDB, logAudit } from '../db.js';
 import { ownedIds, isProjectMember } from '../lib/scope.js';
 import { pageParams, runPaged, groupBy, sendList } from '../lib/paginate.js';
+import { validateCustom, customFilterSql } from '../lib/customFields.js';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ function normalizeDomain(v) {
 }
 
 // Validates a create/update body. Returns { error } or { sets } (column → value).
-function companyFields(body, projectId, { create = false } = {}) {
+function companyFields(body, projectId, { create = false, existing = {} } = {}) {
   const sets = {};
   for (const f of TEXT_FIELDS) {
     if (body[f] !== undefined) sets[f] = String(body[f] ?? '').trim().slice(0, f === 'notes' ? 20000 : 500);
@@ -26,9 +27,10 @@ function companyFields(body, projectId, { create = false } = {}) {
     if (body.owner_id !== null && !isProjectMember(projectId, body.owner_id)) return { error: 'Owner must be a member of this workspace' };
     sets.owner_id = body.owner_id;
   }
-  if (body.custom !== undefined) {
-    if (!body.custom || typeof body.custom !== 'object' || Array.isArray(body.custom)) return { error: 'custom must be an object' };
-    sets.custom = JSON.stringify(body.custom);
+  if (body.custom !== undefined || create) {
+    const v = validateCustom(projectId, 'company', body.custom, existing, { create });
+    if (v.error) return { error: v.error };
+    sets.custom = JSON.stringify(v.value);
   }
   return { sets };
 }
@@ -58,6 +60,8 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
   else if (owner === 'none') sql += ' AND owner_id IS NULL';
   else if (owner) { sql += ' AND owner_id = ?'; params.push(owner); }
   if (industry) { sql += ' AND industry = ?'; params.push(industry); }
+  const cfFilter = customFilterSql(pid, 'company', req.query);
+  sql += cfFilter.sql; params.push(...cfFilter.params);
   const sortCols = ['name', 'created_at', 'updated_at', 'industry', 'city'];
   sql += ` ORDER BY ${sortCols.includes(sortBy) ? sortBy : 'name'} ${sortOrder === 'desc' ? 'DESC' : 'ASC'}`;
 
@@ -99,7 +103,7 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
   const pid = req.project.id;
   const existing = getCompany(db, pid, req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
-  const cf = companyFields(req.body, pid);
+  const cf = companyFields(req.body, pid, { existing: serialize(existing).custom });
   if (cf.error) return res.status(400).json({ error: cf.error });
   const sets = { ...cf.sets, updated_at: Date.now() };
   const cols = Object.keys(sets);

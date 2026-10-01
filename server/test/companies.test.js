@@ -13,6 +13,7 @@ before(async () => {
 after(async () => { await srv?.stop(); });
 
 test('company CRUD with domain normalisation and owner default', async () => {
+  await P.post('/custom-fields', { entity: 'company', label: 'Tier', type: 'select', options: ['gold', 'silver'] });
   const c = (await P.post('/companies', { name: 'Acme Foods', website: 'https://www.acme.example/menu', industry: 'Restaurants' })).body;
   assert.equal(c.domain, 'acme.example');
   assert.equal(c.owner_id, 'admin');

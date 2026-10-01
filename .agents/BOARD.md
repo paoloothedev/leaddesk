@@ -53,16 +53,6 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
 
-### T-025 · Custom fields backend (migration 009)
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P1
-- Files: server/migrations/009-custom-fields.js, server/routes/customFields.js (new), server/lib/customFields.js (validation), routes/contacts.js, companies.js, deals.js
-- Depends on: T-020, T-021, T-022
-- Updated: 2026-10-01 01:15
-- Notes: Spec: PHASE-1-DESIGN § Custom fields. Validation helper used by all three entity routes.
-
 ### T-027 · Custom fields UI (settings + forms + table columns)
 - Status: TODO
 - Owner: —
@@ -132,6 +122,17 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-025 · Custom fields backend (migration 009)
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P1
+- Files: server/migrations/009-custom-fields.js, server/routes/customFields.js (new), server/lib/customFields.js (validation), routes/contacts.js, companies.js, deals.js
+- Depends on: T-020, T-021, T-022
+- Updated: 2026-10-01 01:41
+- Notes: Spec: PHASE-1-DESIGN § Custom fields. Validation helper used by all three entity routes.
+  → Migration 009, lib/customFields.js (12 types, coercion, merge, required, cf.* filters), routes/customFields.js; wired into contacts/companies/deals. test/custom-fields.test.js. @frontend T-027 unblocked.
 
 ### T-032 · Google Maps import creates companies + contacts
 - Status: DONE

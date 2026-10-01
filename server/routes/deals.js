@@ -4,6 +4,7 @@ import { getDB, logAudit } from '../db.js';
 import { isOwned, isProjectMember } from '../lib/scope.js';
 import { pageParams, runPaged, groupBy, sendList } from '../lib/paginate.js';
 import { newId } from '../lib/pipelines.js';
+import { validateCustom, customFilterSql } from '../lib/customFields.js';
 
 const router = Router();
 const STATUSES = ['open', 'won', 'lost'];
@@ -16,7 +17,7 @@ function getStage(db, pid, id) {
 }
 
 // Validates editable fields. Returns { error } or { sets }. Stage/pipeline are handled separately (moveDeal).
-function dealFields(body, pid, { create = false } = {}) {
+function dealFields(body, pid, { create = false, existing = {} } = {}) {
   const sets = {};
   if (body.title !== undefined || create) {
     const t = String(body.title ?? '').trim().slice(0, 300);
@@ -55,9 +56,10 @@ function dealFields(body, pid, { create = false } = {}) {
   }
   if (body.notes !== undefined) sets.notes = String(body.notes || '').slice(0, 20000);
   if (body.source !== undefined) sets.source = String(body.source || '').slice(0, 50);
-  if (body.custom !== undefined) {
-    if (!body.custom || typeof body.custom !== 'object' || Array.isArray(body.custom)) return { error: 'custom must be an object' };
-    sets.custom = JSON.stringify(body.custom);
+  if (body.custom !== undefined || create) {
+    const v = validateCustom(pid, 'deal', body.custom, existing, { create });
+    if (v.error) return { error: v.error };
+    sets.custom = JSON.stringify(v.value);
   }
   return { sets };
 }
@@ -118,6 +120,8 @@ function buildFilter(req) {
   if (contact) { where += ' AND contact_id = ?'; params.push(contact); }
   if (company) { where += ' AND company_id = ?'; params.push(company); }
   if (search) { where += ' AND title LIKE ?'; params.push(`%${search}%`); }
+  const cf = customFilterSql(req.project.id, 'deal', req.query);
+  where += cf.sql; params.push(...cf.params);
   return { where, params };
 }
 
@@ -206,7 +210,9 @@ router.put('/:id', requirePermission('deals.edit'), (req, res) => {
   const pid = req.project.id;
   const deal = getDeal(db, pid, req.params.id);
   if (!deal) return res.status(404).json({ error: 'Not found' });
-  const f = dealFields(req.body, pid);
+  let existingCustom = {};
+  try { existingCustom = JSON.parse(deal.custom || '{}'); } catch {}
+  const f = dealFields(req.body, pid, { existing: existingCustom });
   if (f.error) return res.status(400).json({ error: f.error });
   let stage = null;
   if (req.body.stage_id && req.body.stage_id !== deal.stage_id) {

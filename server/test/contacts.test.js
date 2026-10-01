@@ -58,6 +58,7 @@ before(async () => {
 after(async () => { await srv?.stop(); });
 
 test('contacts API creates and updates lifecycle, owner, source and custom fields', async () => {
+  await P.post('/custom-fields', { entity: 'contact', label: 'Budget', type: 'money' });
   const c = (await P.post('/contacts', { name: 'Acme buyer', phone: '201000000031', lifecycle: 'qualified', custom: { budget: 5000 } })).body;
   assert.equal(c.lifecycle, 'qualified');
   assert.equal(c.owner_id, 'admin', 'creator is default owner');
