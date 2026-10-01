@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X, Trash, Skull, CheckCircle } from '@phosphor-icons/react'
-import { getLead, createLead, updateLead, deleteLead } from '../api'
+import { getLead, createLead, updateLead, deleteLead, getProjectMembers, getCompanies } from '../api'
+import RecordPicker from './RecordPicker'
+import { LIFECYCLE } from '../lifecycle'
+
+const searchCompanies = async (q) => {
+  const r = await getCompanies({ search: q, page: 1, limit: 8 })
+  return r.items.map(c => ({ id: c.id, name: c.name, sub: [c.city, c.industry].filter(Boolean).join(' · ') }))
+}
 
 export default function LeadModal({ leadId, stages, tags, close, showToast, refresh }) {
   const [lead, setLead] = useState(null)
@@ -20,11 +27,18 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
   const [notes, setNotes] = useState('')
   const [phoneValid, setPhoneValid] = useState(false)
   const [selectedTagIds, setSelectedTagIds] = useState(new Set())
+  const [lifecycle, setLifecycle] = useState('lead')
+  const [ownerId, setOwnerId] = useState('')
+  const [company, setCompany] = useState(null)
+  const [members, setMembers] = useState([])
+
+  useEffect(() => { getProjectMembers().then(setMembers).catch(() => {}) }, [])
 
   useEffect(() => {
     if (leadId === null) {
       setName(''); setPhone(''); setEmail(''); setFacebook(''); setInstagram(''); setTiktok(''); setLink(''); setLocation('')
       setStage(stages[0]?.id || ''); setStatus('active'); setVerified('no'); setNotes(''); setPhoneValid(false); setSelectedTagIds(new Set())
+      setLifecycle('lead'); setOwnerId(''); setCompany(null)
       setLead(null)
     } else {
       (async () => {
@@ -37,6 +51,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
           setStatus(l.status || 'active'); setVerified(l.verified ? 'yes' : 'no')
           setNotes(l.notes || ''); setPhoneValid(!!l.phone_valid)
           setSelectedTagIds(new Set((l.tags || []).map(t => t.id)))
+          setLifecycle(l.lifecycle || 'lead'); setOwnerId(l.owner_id || ''); setCompany(l.company || null)
         } catch {}
         setLoading(false)
       })()
@@ -66,7 +81,9 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
       name: name.trim(), phone, email, facebook, instagram, tiktok, link, location, notes,
       stage_id: stage, status, verified: verified === 'yes', phone_valid: phoneValid,
       tag_ids: Array.from(selectedTagIds),
+      lifecycle, company_id: company?.id || null,
     }
+    if (ownerId || leadId) data.owner_id = ownerId || null
     try {
       if (leadId) {
         await updateLead(leadId, data)
@@ -77,7 +94,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
       }
       close()
       refresh()
-    } catch { showToast('Failed to save lead.', true) }
+    } catch (err) { showToast(err.message || 'Failed to save contact.', true) }
   }
 
   const handleDelete = async () => {
@@ -117,7 +134,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 h-14 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{leadId ? 'Edit Lead' : 'New Lead'}</h2>
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{leadId ? 'Edit contact' : 'New contact'}</h2>
           <button onClick={close} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
             <X size={18} />
           </button>
@@ -129,6 +146,23 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
               <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Name</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
                 className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Lifecycle</label>
+              <select value={lifecycle} onChange={e => setLifecycle(e.target.value)} className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
+                {Object.entries(LIFECYCLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Owner</label>
+              <select value={ownerId} onChange={e => setOwnerId(e.target.value)} className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
+                <option value="">{leadId ? 'Nobody' : 'Me (default)'}</option>
+                {members.map(m => <option key={m.id} value={m.id}>{m.display_name || m.username}</option>)}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Company</label>
+              <RecordPicker value={company} onChange={setCompany} search={searchCompanies} placeholder="Search companies…" />
             </div>
             <div>
               <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Phone</label>

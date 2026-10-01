@@ -19,7 +19,7 @@ const DEFAULT_CARDS = [
   { id: '1', name: 'Total Leads', metric: 'total', color: 'bg-zinc-400', textColor: 'text-zinc-600 dark:text-zinc-400', enabled: true },
   { id: '2', name: 'Verified', metric: 'verified', color: 'bg-emerald-500', textColor: 'text-emerald-600 dark:text-emerald-400', enabled: true },
   { id: '3', name: 'Ready for Outreach', metric: 'readyForOutreach', color: 'bg-violet-500', textColor: 'text-violet-600 dark:text-violet-400', enabled: true },
-  { id: '4', name: 'Active Clients', metric: 'activeClients', color: 'bg-blue-500', textColor: 'text-blue-600 dark:text-blue-400', enabled: true },
+  { id: '4', name: 'Qualified contacts', metric: 'activeClients', color: 'bg-blue-500', textColor: 'text-blue-600 dark:text-blue-400', enabled: true },
   { id: '5', name: 'Campaigns', metric: 'totalCampaigns', color: 'bg-amber-500', textColor: 'text-amber-600 dark:text-amber-400', enabled: true },
   { id: '6', name: 'Dead', metric: 'dead', color: 'bg-zinc-300 dark:bg-zinc-600', textColor: 'text-zinc-500 dark:text-zinc-400', enabled: true },
 ]

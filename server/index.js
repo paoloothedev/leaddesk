@@ -98,8 +98,12 @@ app.get('/api/stats', resolveProject, requirePermission('dashboard.view', 'leads
     WHERE l.project_id = ? AND l.status = ?
   `).get(pid, 'active').c;
 
-  const totalClients = db.prepare('SELECT COUNT(*) as c FROM clients WHERE project_id = ?').get(pid).c;
-  const activeClients = db.prepare("SELECT COUNT(*) as c FROM clients WHERE project_id = ? AND status = 'active'").get(pid).c;
+  // Keys kept for saved dashboard configs: totalClients = customers, activeClients = qualified contacts
+  const totalClients = db.prepare("SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = 'active' AND lifecycle = 'customer'").get(pid).c;
+  const activeClients = db.prepare("SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = 'active' AND lifecycle = 'qualified'").get(pid).c;
+  const openDealsRow = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(value), 0) as v FROM deals WHERE project_id = ? AND status = 'open'").get(pid);
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const wonRow = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(value), 0) as v FROM deals WHERE project_id = ? AND status = 'won' AND won_at >= ?").get(pid, monthStart.getTime());
 
   const readyForOutreach = db.prepare(`
     SELECT COUNT(*) as c FROM leads
@@ -157,6 +161,7 @@ app.get('/api/stats', resolveProject, requirePermission('dashboard.view', 'leads
     total, verified, unverified, dead, invalidPhone, inCampaign,
     readyForOutreach, verifiedNoTags, verifiedNoTagsNoCampaign,
     totalClients, activeClients, totalCampaigns, activeJobs,
+    openDeals: openDealsRow.c, openDealValue: openDealsRow.v, wonDealsThisMonth: wonRow.c, wonValueThisMonth: wonRow.v,
     verifiedPercent: total > 0 ? Math.round((verified / total) * 100) : 0,
     stageBreakdown,
     tagBreakdown,
@@ -172,8 +177,12 @@ app.get('/api/stats', resolveProject, requirePermission('dashboard.view', 'leads
       { key: 'readyForOutreach', label: 'Ready for Outreach', type: 'stat' },
       { key: 'verifiedNoTags', label: 'Verified, No Tags', type: 'stat' },
       { key: 'verifiedNoTagsNoCampaign', label: 'Verified, No Tags & Campaign', type: 'stat' },
-      { key: 'totalClients', label: 'Total Clients', type: 'stat' },
-      { key: 'activeClients', label: 'Active Clients', type: 'stat' },
+      { key: 'totalClients', label: 'Customers', type: 'stat' },
+      { key: 'activeClients', label: 'Qualified contacts', type: 'stat' },
+      { key: 'openDeals', label: 'Open deals', type: 'stat' },
+      { key: 'openDealValue', label: 'Open pipeline value', type: 'stat' },
+      { key: 'wonDealsThisMonth', label: 'Deals won this month', type: 'stat' },
+      { key: 'wonValueThisMonth', label: 'Revenue won this month', type: 'stat' },
       { key: 'totalCampaigns', label: 'Total Campaigns', type: 'stat' },
       { key: 'activeJobs', label: 'Active Broadcast Jobs', type: 'stat' },
       ...stageBreakdown.map(s => ({ key: `stage:${s.id}`, label: `Stage: ${s.name}`, type: 'stage', stageId: s.id, color: s.color })),

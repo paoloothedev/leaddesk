@@ -18,7 +18,7 @@ router.get('/', (req, res) => {
         ORDER BY p.created_at DESC
       `).all(req.user.id);
   const leadCount = db.prepare("SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = 'active'");
-  const clientCount = db.prepare('SELECT COUNT(*) as c FROM clients WHERE project_id = ?');
+  const clientCount = db.prepare("SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = 'active' AND lifecycle = 'customer'");
   const campaignCount = db.prepare('SELECT COUNT(*) as c FROM campaigns WHERE project_id = ?');
   const tagCount = db.prepare('SELECT COUNT(*) as c FROM tags WHERE project_id = ?');
 

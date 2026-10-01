@@ -7,9 +7,8 @@ import { can } from '../permissions'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: ChartLine, perms: ['dashboard.view', 'leads.view'] },
-  { id: 'leads', label: 'All Leads', icon: Users, perms: ['leads.view'] },
+  { id: 'leads', label: 'Contacts', icon: Users, perms: ['leads.view'] },
   { id: 'deals', label: 'Deals', icon: Handshake, perms: ['deals.view'] },
-  { id: 'clients', label: 'Clients', icon: UserCircle, perms: ['leads.view'] },
   { id: 'scraper', label: 'Maps Scraper', icon: MagnifyingGlass, perms: ['leads.import'] },
   { id: 'campaigns', label: 'Campaigns', icon: Megaphone, perms: ['campaigns.view'] },
   { id: 'dead', label: 'Dead List', icon: Skull, perms: ['leads.view'] },

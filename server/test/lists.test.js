@@ -61,3 +61,16 @@ test('clients list paginates and filters by stage', async () => {
   assert.ok(r.items.every(c => c.stage === 'new' && c.tags.length === 1));
   assert.ok(Array.isArray((await P.get('/clients')).body));
 });
+
+test('stats count customers from contacts and include deal metrics', async () => {
+  const c = (await P.post('/contacts', { name: 'Paying', phone: '201000000199', lifecycle: 'customer' })).body.id;
+  const won = (await P.get('/pipelines')).body[0].stages.find(s => s.kind === 'won').id;
+  await P.post('/deals', { title: 'Open one', value: 50 });
+  await P.post('/deals', { title: 'Won one', value: 70, stage_id: won, contact_id: c });
+  const s = (await P.get('/stats')).body;
+  assert.equal(s.totalClients, 1);
+  assert.equal(s.openDeals, 1);
+  assert.equal(s.openDealValue, 50);
+  assert.equal(s.wonDealsThisMonth, 1);
+  assert.equal(s.wonValueThisMonth, 70);
+});

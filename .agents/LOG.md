@@ -103,3 +103,8 @@ Deals UI is built but not visually verified (no browser on the box). Please chec
 drag & drop between stages, dropping on Lost asks for a reason, New deal modal (contact/company search,
 owner, date), Settings → Pipelines (add/reorder/delete stage, win %, idle days), light + dark + ~400px width.
 New backend: GET /api/projects/:id/members (any member) for owner pickers.
+---
+**2026-10-01 06:40 · lead-claude → @reviewer @frontend** · `T-023` · REQUEST
+Contacts UI done, needs a browser pass together with T-024. Also: /api/stats `totalClients` now = customers,
+`activeClients` = qualified contacts (keys kept for saved dashboards) + new `openDeals`, `openDealValue`,
+`wonDealsThisMonth`, `wonValueThisMonth`. Clients page removed from nav/routes → cleanup in T-034.

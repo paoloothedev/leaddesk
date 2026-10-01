@@ -65,8 +65,8 @@ export function deleteLead(id) {
   return request('/leads/' + id, { method: 'DELETE' });
 }
 
-export function bulkAction(ids, action, stageId, tagId) {
-  return request('/leads/bulk', { method: 'POST', body: JSON.stringify({ ids, action, stageId, tagId }) });
+export function bulkAction(ids, action, stageId, tagId, value) {
+  return request('/leads/bulk', { method: 'POST', body: JSON.stringify({ ids, action, stageId, tagId, value }) });
 }
 
 export function importPreview(file) {

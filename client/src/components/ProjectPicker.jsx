@@ -217,7 +217,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                         </span>
                         <span className="flex items-center gap-1">
                           <UserCircle size={12} />
-                          {p.clientCount ?? 0} clients
+                          {p.clientCount ?? 0} customers
                         </span>
                       </div>
                     </div>

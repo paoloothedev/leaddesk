@@ -4,8 +4,9 @@ import {
   MagnifyingGlass, Funnel, CheckCircle, XCircle, Trash,
   ArrowSquareOut, UserPlus, CaretRight, PaperPlaneTilt
 } from '@phosphor-icons/react'
-import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign } from '../api'
+import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign, getProjectMembers } from '../api'
 import Pagination from './Pagination'
+import { LIFECYCLE } from '../lifecycle'
 import WhatsAppSend from './WhatsAppSend'
 
 function socialLinks(l) {
@@ -29,7 +30,7 @@ const rowVariants = {
   })
 }
 
-export default function LeadsTable({ stages, tags, campaigns, refreshId, openLeadModal, showToast, refresh, goView }) {
+export default function LeadsTable({ stages, tags, campaigns, refreshId, openLeadModal, showToast, refresh, goView, user }) {
   const [leads, setLeads] = useState([])
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(() => Number(localStorage.getItem('leadsPageSize')) || 50)
@@ -43,6 +44,11 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
   const [fTag, setFTag] = useState([])
   const [fTagNot, setFTagNot] = useState(false)
   const [fTagMode, setFTagMode] = useState('any')
+  const [fLifecycle, setFLifecycle] = useState('')
+  const [fOwner, setFOwner] = useState('')
+  const [members, setMembers] = useState([])
+  const [showBulkLifecycle, setShowBulkLifecycle] = useState(false)
+  const [showBulkOwner, setShowBulkOwner] = useState(false)
   const [selected, setSelected] = useState(new Set())
   const [showBulkStage, setShowBulkStage] = useState(false)
   const [showBulkTag, setShowBulkTag] = useState(false)
@@ -58,6 +64,8 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
       if (fStage) params.stage = fStage
       if (fCampUse) params.campaignUse = fCampUse
       if (fSocial) params.hasSocial = 'true'
+      if (fLifecycle) params.lifecycle = fLifecycle
+      if (fOwner) params.owner = fOwner
       if (fTag.length) {
         const joined = fTag.join(',')
         if (fTagNot) params.tagNot = joined
@@ -71,9 +79,11 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
       setTotal(data.total)
       setSelected(new Set())
     } catch {}
-  }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, page, limit])
+  }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner, page, limit])
 
-  useEffect(() => { setPage(1) }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode])
+  useEffect(() => { setPage(1) }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner])
+
+  useEffect(() => { getProjectMembers().then(setMembers).catch(() => {}) }, [])
 
   const changeLimit = (n) => {
     setLimit(n)
@@ -117,11 +127,11 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
     } catch { showToast('Failed to delete.', true) }
   }
 
-  const doBulk = async (action, stageId, tagId) => {
+  const doBulk = async (action, stageId, tagId, value) => {
     const ids = Array.from(selected)
     if (!ids.length) { showToast('Select some leads first.', true); return }
     try {
-      await bulkAction(ids, action, stageId, tagId)
+      await bulkAction(ids, action, stageId, tagId, value)
       showToast(`Done: ${ids.length} leads.`)
       refresh()
     } catch { showToast('Bulk action failed.', true) }
@@ -147,14 +157,23 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
     <div className="max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">All Leads</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Active leads only.</p>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Contacts</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Everyone you work with — from cold leads to customers.</p>
         </div>
         <button onClick={() => openLeadModal(null)}
           className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
           <UserPlus size={14} weight="bold" />
-          Add Lead
+          Add contact
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1 mb-3 border-b border-zinc-200 dark:border-zinc-800">
+        {[['', 'All'], ...Object.entries(LIFECYCLE).map(([k, v]) => [k, v.label + 's'])].map(([k, l]) => (
+          <button key={k} onClick={() => setFLifecycle(k)}
+            className={`px-3 h-9 -mb-px text-xs font-medium border-b-2 transition-colors ${fLifecycle === k ? 'border-emerald-500 text-zinc-900 dark:text-zinc-100' : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}>
+            {l}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -179,6 +198,13 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
           className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
           <option value="">Stage: any</option>
           {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select value={fOwner} onChange={e => setFOwner(e.target.value)}
+          className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
+          <option value="">Owner: anyone</option>
+          <option value="me">Owned by me</option>
+          <option value="none">Unassigned</option>
+          {members.map(m => <option key={m.id} value={m.id}>{m.display_name || m.username}</option>)}
         </select>
         <select value={fCampUse} onChange={e => setFCampUse(e.target.value)}
           className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
@@ -211,7 +237,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
             </button>
           )}
         </div>
-        <button onClick={() => { setSearch(''); setFVerified(''); setFPhone(''); setFStage(''); setFCampUse(''); setFSocial(false); setFTag([]); setFTagNot(false); setFTagMode('any') }}
+        <button onClick={() => { setSearch(''); setFVerified(''); setFPhone(''); setFStage(''); setFCampUse(''); setFSocial(false); setFTag([]); setFTagNot(false); setFTagMode('any'); setFLifecycle(''); setFOwner('') }}
           className="h-9 px-3 rounded-lg text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
           Clear
         </button>
@@ -263,10 +289,29 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
               <Trash size={12} className="mr-1.5" />
               Delete
             </button>
-            <button onClick={() => doBulk('convert')}
-              className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 transition-colors active:scale-[0.98]">
-              Convert to CRM
+            <button onClick={() => setShowBulkLifecycle(!showBulkLifecycle)}
+              className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 transition-colors">
+              Set lifecycle...
             </button>
+            {showBulkLifecycle && (
+              <select value="" onChange={e => { if (e.target.value) { doBulk('lifecycle', null, null, e.target.value); setShowBulkLifecycle(false) } }}
+                className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
+                <option value="">Select lifecycle...</option>
+                {Object.entries(LIFECYCLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            )}
+            <button onClick={() => setShowBulkOwner(!showBulkOwner)}
+              className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+              Assign owner...
+            </button>
+            {showBulkOwner && (
+              <select value="" onChange={e => { if (e.target.value) { doBulk('owner', null, null, e.target.value === '__none' ? null : e.target.value); setShowBulkOwner(false) } }}
+                className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
+                <option value="">Select owner...</option>
+                <option value="__none">Nobody</option>
+                {members.map(m => <option key={m.id} value={m.id}>{m.display_name || m.username}</option>)}
+              </select>
+            )}
             <button onClick={() => setShowBulkCampaign(!showBulkCampaign)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Add to campaign...
@@ -313,6 +358,8 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                       className="accent-emerald-500 w-3.5 h-3.5" />
                   </th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Name</th>
+                  <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Lifecycle</th>
+                  <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Company</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Phone</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Email</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Links</th>
@@ -344,6 +391,12 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                         </button>
                       </div>
                     </td>
+                    <td className="py-3 px-4">
+                      <span className={`inline-flex items-center px-2 h-5 rounded text-[10px] font-medium whitespace-nowrap ${(LIFECYCLE[l.lifecycle] || LIFECYCLE.lead).cls}`}>
+                        {(LIFECYCLE[l.lifecycle] || LIFECYCLE.lead).label}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-xs text-zinc-600 dark:text-zinc-400 max-w-[140px] truncate">{l.company?.name || '—'}</td>
                     <td className="py-3 px-4">
                       <span className="text-xs text-zinc-700 dark:text-zinc-300">{l.phone || <span className="text-zinc-300 dark:text-zinc-600">&mdash;</span>}</span>
                       {l.phone && (

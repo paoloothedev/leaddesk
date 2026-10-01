@@ -16,6 +16,17 @@ _(none)_
 
 ## REVIEW
 
+### T-023 · Contacts UI: Leads → Contacts with lifecycle; Clients = customers view
+- Status: REVIEW
+- Owner: lead-claude
+- Role: frontend
+- Priority: P0
+- Files: client/src/App.jsx, client/src/api.js, client/src/components/Sidebar.jsx, LeadsTable.jsx, LeadModal.jsx, ClientsList.jsx
+- Depends on: T-020
+- Updated: 2026-10-01 01:32
+- Notes: Lifecycle filter chips + column; convert-to-client becomes 'mark as customer'.
+  → Contacts page (lifecycle tabs + column, company column, owner filter, bulk lifecycle/owner), contact modal (lifecycle/owner/company), sidebar Contacts + Deals (Clients removed), dashboard/picker counts from contacts + new deal metrics. Build OK, 48 tests; NOT visually checked.
+
 ### T-024 · Deals UI: kanban board + pipeline settings
 - Status: REVIEW
 - Owner: lead-claude
@@ -41,16 +52,6 @@ _(none)_
 - Files: client/src/components/LeadsTable.jsx, DeadList.jsx, Campaigns.jsx, ClientsList.jsx, BroadcastJobs.jsx
 - Updated: 2026-10-01 01:15
 - Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
-
-### T-023 · Contacts UI: Leads → Contacts with lifecycle; Clients = customers view
-- Status: TODO
-- Owner: —
-- Role: frontend
-- Priority: P0
-- Files: client/src/App.jsx, client/src/api.js, client/src/components/Sidebar.jsx, LeadsTable.jsx, LeadModal.jsx, ClientsList.jsx
-- Depends on: T-020
-- Updated: 2026-10-01 01:15
-- Notes: Lifecycle filter chips + column; convert-to-client becomes 'mark as customer'.
 
 ### T-025 · Custom fields backend (migration 009)
 - Status: TODO
@@ -129,6 +130,16 @@ _(none)_
 - Files: server/index.js (/api/export, /api/import/backup), server/test/backup.test.js
 - Updated: 2026-10-01 01:25
 - Notes: Export/restore currently only covers leads, stages, tags, campaigns. Keep id remapping for new tables.
+
+### T-034 · Retire legacy clients (table, /api/clients, ClientsList/ClientModal)
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P2
+- Files: server/routes/clients.js, server/index.js, client/src/components/ClientsList.jsx, ClientModal.jsx, client/src/api.js, a migration that drops clients/client_tags after copying client_activities
+- Depends on: Phase 2 E2.1 (timeline) — client_activities must move to the activity timeline first
+- Updated: 2026-10-01 01:31
+- Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ### T-032 · Google Maps import creates companies + contacts
 - Status: TODO
