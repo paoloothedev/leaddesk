@@ -17,11 +17,12 @@ export function findDuplicates(db, pid, { limit = 100 } = {}) {
     const email = (r.email || '').trim().toLowerCase();
     if (email) add('e:' + email, 'email', email, r);
   }
-  // A pair that matches on both phone and email should be listed once
+  // A pair that matches on both phone and email should be listed once; dismissed groups stay hidden
+  const dismissed = new Set(db.prepare('SELECT key FROM duplicate_dismissals WHERE project_id = ?').all(pid).map(r => r.key));
   const seen = new Set();
   const groups = [];
-  for (const g of byKey.values()) {
-    if (g.contacts.length < 2) continue;
+  for (const [key, g] of byKey) {
+    if (g.contacts.length < 2 || dismissed.has(key)) continue;
     const sig = g.contacts.map(c => c.id).sort().join(',');
     if (seen.has(sig)) continue;
     seen.add(sig);

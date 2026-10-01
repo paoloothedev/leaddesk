@@ -51,3 +51,16 @@ test('merge refuses ids from another workspace', async () => {
   assert.equal((await Q.get(`/contacts/${q}`)).status, 200);
   assert.equal((await P.get('/contacts/duplicates')).body.length, 0, 'duplicates never span workspaces');
 });
+
+test('"not duplicates" hides a group permanently, per workspace', async () => {
+  await P.post('/contacts', { name: 'Chain A', phone: '201000000620' });
+  await P.post('/contacts', { name: 'Chain B', phone: '201000000620' });
+  await Q.post('/contacts', { name: 'Q1', phone: '201000000620' });
+  await Q.post('/contacts', { name: 'Q2', phone: '201000000620' });
+  const g = (await P.get('/contacts/duplicates')).body.find(x => x.value === '201000000620');
+  assert.ok(g);
+  assert.equal((await P.post('/contacts/duplicates/dismiss', { reason: g.reason, value: g.value })).status, 200);
+  assert.ok(!(await P.get('/contacts/duplicates')).body.some(x => x.value === '201000000620'));
+  assert.ok((await Q.get('/contacts/duplicates')).body.some(x => x.value === '201000000620'), 'other workspace unaffected');
+  assert.equal((await P.post('/contacts/duplicates/dismiss', { reason: 'name', value: 'x' })).status, 400);
+});

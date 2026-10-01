@@ -11,8 +11,9 @@ import * as m007 from './007-companies.js';
 import * as m008 from './008-deals.js';
 import * as m009 from './009-custom-fields.js';
 import * as m010 from './010-saved-views.js';
+import * as m011 from './011-duplicate-dismissals.js';
 
-export const MIGRATIONS = [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010];
+export const MIGRATIONS = [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011];
 
 export function runMigrations(db) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)');

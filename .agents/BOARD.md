@@ -10,17 +10,6 @@ by running the code.
 
 ## IN PROGRESS
 
-### T-031 · Duplicate detection & merge for contacts
-- Status: IN PROGRESS
-- Owner: lead-claude
-- Role: backend
-- Priority: P2
-- Files: server/routes/contacts.js (merge endpoint), server/lib/merge.js, client/src/components/MergeContacts.jsx
-- Depends on: T-020
-- Updated: 2026-10-01 01:44
-- Notes: Match by phone/email; merge keeps history, tags, campaigns, deals.
-  → Backend first (duplicates + merge endpoints); UI later.
-
 ### T-029 · Workspace UX: rename Project→Workspace in UI; workspace templates (clone setup)
 - Status: IN PROGRESS
 - Owner: lead-claude
@@ -62,6 +51,18 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-031 · Duplicate detection & merge for contacts
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P2
+- Files: server/routes/contacts.js (merge endpoint), server/lib/merge.js, client/src/components/MergeContacts.jsx
+- Depends on: T-020
+- Updated: 2026-10-01 02:27
+- Notes: Match by phone/email; merge keeps history, tags, campaigns, deals.
+  → Backend first (duplicates + merge endpoints); UI later.
+  → Duplicates review page (/p/:pid/duplicates, 'Find duplicates' on Contacts): pick primary, tick which to merge, 'Not duplicates' persisted (migration 011). Verified on live-data snapshot: 5 groups, KFC branches dismissed and stays hidden after reload, Koshary Masrawy pair merged.
 
 ### T-030 · Global search (FTS5) + saved views
 - Status: DONE

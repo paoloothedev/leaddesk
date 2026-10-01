@@ -182,6 +182,16 @@ router.get('/duplicates', requirePermission('leads.view'), (req, res) => {
   res.json(findDuplicates(getDB(), req.project.id, { limit: Math.min(500, parseInt(req.query.limit) || 100) }));
 });
 
+// "Not duplicates": hide a group for good. key = 'p:<digits>' or 'e:<email>' (reason/value from the list).
+router.post('/duplicates/dismiss', requirePermission('leads.edit'), (req, res) => {
+  const { reason, value } = req.body;
+  if (!['phone', 'email'].includes(reason) || !value) return res.status(400).json({ error: 'reason and value required' });
+  const key = (reason === 'phone' ? 'p:' : 'e:') + String(value).toLowerCase();
+  getDB().prepare('INSERT OR IGNORE INTO duplicate_dismissals (project_id, key, account_id, created_at) VALUES (?, ?, ?, ?)')
+    .run(req.project.id, key, req.user.id, Date.now());
+  res.json({ ok: true });
+});
+
 // Merge duplicates into a primary contact
 router.post('/merge', requirePermission('leads.edit'), (req, res) => {
   const db = getDB();

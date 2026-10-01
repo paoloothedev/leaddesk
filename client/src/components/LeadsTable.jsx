@@ -191,11 +191,17 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Contacts</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Everyone you work with — from cold leads to customers.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <button onClick={() => goView('duplicates')}
+          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+          Find duplicates
+        </button>
         <button onClick={() => openLeadModal(null)}
           className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
           <UserPlus size={14} weight="bold" />
           Add contact
         </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1 mb-3 border-b border-zinc-200 dark:border-zinc-800">

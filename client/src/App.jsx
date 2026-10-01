@@ -21,6 +21,7 @@ import CompaniesList from './components/CompaniesList'
 import ContactPage from './components/ContactPage'
 import CompanyPage from './components/CompanyPage'
 import GlobalSearch from './components/GlobalSearch'
+import Duplicates from './components/Duplicates'
 import { getStats, getStages, getTags, getCampaigns, getSettings, getProjects, setCurrentProjectId } from './api'
 
 const pageVariants = {
@@ -29,9 +30,9 @@ const pageVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 }
 
-const VIEWS = ['dashboard', 'leads', 'deals', 'companies', 'contact', 'company', 'scraper', 'campaigns', 'dead', 'settings', 'import']
+const VIEWS = ['dashboard', 'leads', 'deals', 'companies', 'contact', 'company', 'duplicates', 'scraper', 'campaigns', 'dead', 'settings', 'import']
 // Record pages highlight their list in the sidebar
-const NAV_PARENT = { contact: 'leads', company: 'companies' }
+const NAV_PARENT = { contact: 'leads', company: 'companies', duplicates: 'leads' }
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
@@ -276,6 +277,8 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
         return <Dashboard stats={stats} loadStats={loadStats} refreshId={refreshId} goView={goView} openLeadModal={openLeadModal} />
       case 'leads':
         return <LeadsTable user={user} stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} goView={goView} />
+      case 'duplicates':
+        return <Duplicates user={user} showToast={showToast} goView={goView} refresh={refresh} />
       case 'companies':
         return <CompaniesList user={user} refreshId={refreshId} showToast={showToast} goView={goView} />
       case 'contact':

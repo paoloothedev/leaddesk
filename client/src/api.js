@@ -385,3 +385,14 @@ export function createView(data) {
 export function deleteView(id) {
   return request('/views/' + id, { method: 'DELETE' });
 }
+
+// ── Duplicates ──────────────────────────────────────────────────
+export function getDuplicates() {
+  return request('/contacts/duplicates');
+}
+export function mergeContacts(primaryId, duplicateIds) {
+  return request('/contacts/merge', { method: 'POST', body: JSON.stringify({ primaryId, duplicateIds }) });
+}
+export function dismissDuplicate(reason, value) {
+  return request('/contacts/duplicates/dismiss', { method: 'POST', body: JSON.stringify({ reason, value }) });
+}
