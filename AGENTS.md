@@ -83,8 +83,10 @@ Native modules (`better-sqlite3`, `bcrypt`) must be built for the OS you run on 
 2. **New project-scoped routers** are mounted in `server/index.js` as `app.use('/api/x', resolveProject, xRouter)`
    (after the global `authMiddleware`). New scoped tables must be added to `SCOPED_TABLES` in `db.js` **and** to
    the cascade delete in `routes/projects.js`.
-3. **Schema changes** go in `db.js`: `CREATE TABLE IF NOT EXISTS` for new tables; for new columns use
-   `hasColumn()` + `ALTER TABLE` (idempotent). Never drop/rename columns on existing installs without a migration.
+3. **Schema changes = a new migration** in `server/migrations/NNN-name.js` (export `id` + `up(db)`), appended to
+   `MIGRATIONS` in `server/migrations/index.js`. Runs once, inside a transaction, recorded in `schema_migrations`.
+   Never edit a migration that is already committed; never drop/rename columns without a data migration.
+   Test it on a copy of a real DB (`server/leaddesk.db.pre-multiproject-backup` is a real old-install schema).
 4. **Always parameterised SQL** (`db.prepare('… ?').run(x)`). No string interpolation of user input
    (there is one legacy exception in `index.js` `/api/import/backup` — do not copy it).
 5. **Call `logAudit(action, entityType, id, name, details, projectId)`** on create/edit/delete of user data.

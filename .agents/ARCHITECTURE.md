@@ -70,7 +70,7 @@ Global: `accounts(id, username, password_hash, display_name, email, role, parent
 `sessions(token, account_id, created_at, expires_at)`.
 
 ### Startup sequence (`getDB()` first call)
-`initSchema()` → `runMigration()` (adds `project_id` columns, rebuilds `settings` PK, creates **Default**
+`runMigrations(db)` (`server/migrations/`; `001-baseline` = original `initSchema()` + `runMigration()`: adds `project_id` columns, rebuilds `settings` PK, creates **Default**
 project if none, backfills NULL `project_id` into oldest project, creates indexes) → `seedAdminAccount()` →
 `ensureStagesForAllProjects()`.
 

@@ -38,3 +38,9 @@ Docker work is parked (T-002, T-003 moved to PARKED).
 - Verified: npm test --prefix server → 15/15; client build OK.
 - CONTRACT: sockets without a session get connect_error "Not authenticated"; WA control events are silently
   ignored for users without whatsapp.control. POST /import/backup response now { ok, leads }.
+---
+**2026-10-01 02:15 · lead-claude → @all** · `T-013` · DONE / CONTRACT
+Schema changes now go through `server/migrations/NNN-name.js` (see AGENTS.md rule 3). Don't add
+`CREATE TABLE`/`ALTER` to db.js anymore.
+- Verified: npm test 15/15; migration applied once on live-DB snapshot (320 leads, 3 projects intact) and on the
+  legacy pre-multiproject DB (319 leads backfilled into Default); rerun = no-op.

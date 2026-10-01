@@ -58,16 +58,6 @@ _(none)_
 - Updated: 2026-10-01
 - Notes: `loadJobs()` flips running→pending but nothing calls `runJob()` again.
 
-### T-013 · Versioned migrations system (E0.3)
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P0
-- Files: server/db.js, server/migrations/** (new)
-- Updated: 2026-10-01
-- Notes: `schema_migrations(id, applied_at)`; run pending `server/migrations/NNN-*.js` in order inside a
-  transaction on startup. Current initSchema/runMigration become migration 001 (must be a no-op on existing DBs).
-
 ### T-014 · Paginate & batch the leads and clients lists (E0.5)
 - Status: TODO
 - Owner: —
@@ -110,6 +100,17 @@ _(none)_
   lists only member projects. Frontend members UI = separate task.
 
 ## DONE
+
+### T-013 · Versioned migrations system (E0.3)
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P0
+- Files: server/db.js, server/migrations/** (new)
+- Updated: 2026-10-01 01:05
+- Notes: `schema_migrations(id, applied_at)`; run pending `server/migrations/NNN-*.js` in order inside a
+  transaction on startup. Current initSchema/runMigration become migration 001 (must be a no-op on existing DBs).
+  → server/migrations/ (runner + 001-baseline). Verified on fresh DB, live-DB snapshot and pre-multiproject legacy DB; second run is a no-op.
 
 ### T-008 · Parameterise SQL in /api/import/backup
 - Status: DONE
