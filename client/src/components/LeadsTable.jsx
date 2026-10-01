@@ -392,7 +392,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                     <td className="py-3 px-2"><input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleSelect(l.id)} className="accent-emerald-500 w-3.5 h-3.5" /></td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[130px]">{l.name}</span>
+                        <button onClick={() => goView(`contact/${l.id}`)} className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[130px] hover:text-emerald-600 dark:hover:text-emerald-400 text-left">{l.name}</button>
                         <button onClick={() => window.open('https://www.google.com/search?q=' + encodeURIComponent(l.name), '_blank')}
                           className="text-[10px] px-1 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 transition-colors shrink-0" title="Search Google">
                           <ArrowSquareOut size={10} />
@@ -404,7 +404,9 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                         {(LIFECYCLE[l.lifecycle] || LIFECYCLE.lead).label}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-xs text-zinc-600 dark:text-zinc-400 max-w-[140px] truncate">{l.company?.name || '—'}</td>
+                    <td className="py-3 px-4 text-xs text-zinc-600 dark:text-zinc-400 max-w-[140px] truncate">
+                      {l.company ? <button onClick={() => goView(`company/${l.company.id}`)} className="hover:text-emerald-600 dark:hover:text-emerald-400 truncate max-w-full">{l.company.name}</button> : '—'}
+                    </td>
                     {fieldDefs.map(d => (
                       <td key={d.id} className="py-3 px-4 text-xs text-zinc-600 dark:text-zinc-400 max-w-[160px] truncate">{formatCustomValue(d, l.custom?.[d.key], { members }) || '—'}</td>
                     ))}

@@ -17,6 +17,9 @@ import Login from './components/Login'
 import GoogleMapsScraper from './components/GoogleMapsScraper'
 import ProjectPicker from './components/ProjectPicker'
 import DealsBoard from './components/DealsBoard'
+import CompaniesList from './components/CompaniesList'
+import ContactPage from './components/ContactPage'
+import CompanyPage from './components/CompanyPage'
 import { getStats, getStages, getTags, getCampaigns, getSettings, getProjects, setCurrentProjectId } from './api'
 
 const pageVariants = {
@@ -25,7 +28,9 @@ const pageVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 }
 
-const VIEWS = ['dashboard', 'leads', 'deals', 'scraper', 'campaigns', 'dead', 'settings', 'import']
+const VIEWS = ['dashboard', 'leads', 'deals', 'companies', 'contact', 'company', 'scraper', 'campaigns', 'dead', 'settings', 'import']
+// Record pages highlight their list in the sidebar
+const NAV_PARENT = { contact: 'leads', company: 'companies' }
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
@@ -127,6 +132,7 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
   const pathParts = location.pathname.split('/')
   const rawView = pathParts[3] || 'dashboard'
   const view = VIEWS.includes(rawView) ? rawView : 'dashboard'
+  const recordId = pathParts[4] || null
 
   // Verify project exists (header already set during render above)
   useEffect(() => {
@@ -253,6 +259,12 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
         return <Dashboard stats={stats} loadStats={loadStats} refreshId={refreshId} goView={goView} openLeadModal={openLeadModal} />
       case 'leads':
         return <LeadsTable user={user} stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} goView={goView} />
+      case 'companies':
+        return <CompaniesList user={user} refreshId={refreshId} showToast={showToast} goView={goView} />
+      case 'contact':
+        return <ContactPage id={recordId} user={user} stages={stages} refreshId={refreshId} showToast={showToast} goView={goView} openLeadModal={openLeadModal} />
+      case 'company':
+        return <CompanyPage id={recordId} user={user} refreshId={refreshId} showToast={showToast} goView={goView} />
       case 'deals':
         return <DealsBoard user={user} refreshId={refreshId} showToast={showToast} goView={goView} />
       case 'scraper':
@@ -281,7 +293,7 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
   return (
     <div>
       <Sidebar
-        view={view}
+        view={NAV_PARENT[view] || view}
         goView={goView}
         showToast={showToast}
         refresh={refresh}
@@ -300,7 +312,7 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
         <ClockWidget timezone={timezone} />
         <AnimatePresence mode="wait">
           <motion.div
-            key={view}
+            key={view + (recordId || '')}
             variants={pageVariants}
             initial="initial"
             animate="animate"

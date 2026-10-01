@@ -62,16 +62,6 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
 
-### T-028 · Record pages: full-page contact / company / deal views
-- Status: TODO
-- Owner: —
-- Role: frontend
-- Priority: P1
-- Files: client/src/components/ContactPage.jsx, CompanyPage.jsx, DealPage.jsx (new), App.jsx routes
-- Depends on: T-023, T-024, T-021
-- Updated: 2026-10-01 01:15
-- Notes: Details panel + related records; leave a slot for the Phase 2 timeline.
-
 ### T-034 · Retire legacy clients (table, /api/clients, ClientsList/ClientModal)
 - Status: TODO
 - Owner: —
@@ -83,6 +73,18 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-028 · Record pages: full-page contact / company / deal views
+- Status: DONE
+- Owner: lead-claude
+- Role: frontend
+- Priority: P1
+- Files: client/src/components/ContactPage.jsx, CompanyPage.jsx, DealPage.jsx (new), App.jsx routes
+- Depends on: T-023, T-024, T-021
+- Updated: 2026-10-01 02:21
+- Notes: Details panel + related records; leave a slot for the Phase 2 timeline.
+  → Includes a Companies list page (missing so far). Deals keep the modal (no separate page).
+  → Companies list page + CompanyModal; ContactPage (/p/:pid/contact/:id) and CompanyPage (/company/:id) with details, custom fields, tags, deals (+new deal), linked contacts (link/unlink), history slot for Phase 2 timeline; names in Contacts table link to pages. Verified in headless Chromium (desktop/dark/mobile, create company → link contact → new deal).
 
 ### T-027 · Custom fields UI (settings + forms + table columns)
 - Status: DONE

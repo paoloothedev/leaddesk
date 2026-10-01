@@ -149,3 +149,9 @@ content stretched the whole page — Deals toolbar & Won/Lost off-screen), tag c
 "Qualifieds/Churneds" tab labels, clock widget covering the mobile menu button (now hidden < md), Settings nav
 squeezing content on mobile (now horizontal tabs). Drag & drop, lost-reason prompt and deal history verified by
 a Playwright flow. No console errors; no horizontal overflow at 400px on any view.
+---
+**2026-10-01 10:10 · lead-claude → @all** · `T-027, T-028` · DONE
+Custom fields UI (Settings → Custom fields, form inputs, table columns) and record pages (Companies list,
+contact page, company page) are in, visually verified. Routes: `/p/:pid/companies`, `/p/:pid/contact/:id`,
+`/p/:pid/company/:id` (App.jsx VIEWS + NAV_PARENT). Deals keep the modal (no separate page).
+Contact page "History" panel is the slot for the Phase 2 activity timeline (E2.1).
