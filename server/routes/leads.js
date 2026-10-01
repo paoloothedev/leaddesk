@@ -179,6 +179,7 @@ router.get('/:id', requirePermission('leads.view'), (req, res) => {
   lead.phone_valid = !!lead.phone_valid;
   lead.custom = parseCustom(lead);
   lead.company = lead.company_id ? db.prepare('SELECT id, name FROM companies WHERE id = ?').get(lead.company_id) || null : null;
+  lead.deals = db.prepare('SELECT id, title, value, currency, status, stage_id FROM deals WHERE contact_id = ? AND project_id = ? ORDER BY created_at DESC').all(lead.id, req.project.id);
   lead.campaigns = db.prepare(`
     SELECT c.id, c.name FROM campaigns c
     INNER JOIN campaign_leads cl ON cl.campaign_id = c.id WHERE cl.lead_id = ?
@@ -289,6 +290,7 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
 router.delete('/:id', requirePermission('leads.delete'), (req, res) => {
   const db = getDB();
   const existing = db.prepare('SELECT id, name FROM leads WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
+  db.prepare('UPDATE deals SET contact_id = NULL WHERE contact_id = ? AND project_id = ?').run(req.params.id, req.project.id);
   db.prepare('DELETE FROM leads WHERE id = ? AND project_id = ?').run(req.params.id, req.project.id);
   logAudit('delete', 'lead', req.params.id, existing?.name || 'unknown', {}, req.project.id);
   res.json({ ok: true });
@@ -331,6 +333,7 @@ router.post('/bulk', requirePermission('leads.edit', 'leads.verify', 'leads.dele
     const del = db.prepare('DELETE FROM lead_tags WHERE lead_id = ? AND tag_id = ?');
     for (const id of ownedIds) del.run(id, tagId);
   } else if (action === 'delete') {
+    db.prepare(`UPDATE deals SET contact_id = NULL WHERE contact_id IN (${ownedPh})`).run(...ownedIds);
     db.prepare(`DELETE FROM leads WHERE id IN (${ownedPh})`).run(...ownedIds);
   } else if (action === 'lifecycle') {
     db.prepare(`UPDATE leads SET lifecycle = ?, updated_at = ? WHERE id IN (${ownedPh})`).run(value, now, ...ownedIds);

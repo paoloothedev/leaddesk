@@ -5,6 +5,7 @@ import { getProjects } from '../api'
 const PERMISSION_GROUPS = [
   { label: 'Dashboard', perms: ['dashboard.view'] },
   { label: 'Leads', perms: ['leads.view', 'leads.edit', 'leads.delete', 'leads.verify', 'leads.import'] },
+  { label: 'Deals', perms: ['deals.view', 'deals.edit', 'deals.delete'] },
   { label: 'Campaigns', perms: ['campaigns.view', 'campaigns.edit', 'campaigns.delete', 'campaigns.send'] },
   { label: 'Templates', perms: ['templates.view', 'templates.edit'] },
   { label: 'Stages', perms: ['stages.view', 'stages.edit'] },

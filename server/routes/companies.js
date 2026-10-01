@@ -76,7 +76,8 @@ router.get('/:id', requirePermission('leads.view'), (req, res) => {
     SELECT id, name, phone, email, lifecycle, owner_id, status FROM leads
     WHERE company_id = ? AND project_id = ? ORDER BY name
   `).all(company.id, req.project.id);
-  res.json({ ...serialize(company), contacts });
+  const deals = db.prepare('SELECT id, title, value, currency, status, stage_id, contact_id FROM deals WHERE company_id = ? AND project_id = ? ORDER BY created_at DESC').all(company.id, req.project.id);
+  res.json({ ...serialize(company), contacts, deals });
 });
 
 router.post('/', requirePermission('leads.edit'), (req, res) => {
@@ -114,6 +115,7 @@ router.delete('/:id', requirePermission('leads.delete'), (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   db.transaction(() => {
     db.prepare('UPDATE leads SET company_id = NULL WHERE company_id = ? AND project_id = ?').run(existing.id, pid);
+    db.prepare('UPDATE deals SET company_id = NULL WHERE company_id = ? AND project_id = ?').run(existing.id, pid);
     db.prepare('DELETE FROM companies WHERE id = ?').run(existing.id);
   })();
   logAudit('delete', 'company', existing.id, existing.name, {}, pid);

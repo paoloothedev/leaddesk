@@ -4,6 +4,7 @@ import { getDB } from '../db.js';
 const SCOPED = new Set([
   'leads', 'campaigns', 'stages', 'tags', 'message_templates', 'broadcast_jobs',
   'clients', 'email_campaigns', 'import_logs', 'companies',
+  'pipelines', 'pipeline_stages', 'deals',
 ]);
 
 function checkTable(table) {

@@ -94,6 +94,10 @@ router.delete('/:id', requirePermission('projects.manage'), (req, res) => {
     db.prepare('DELETE FROM queue WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM wa_daily_counts WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM companies WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM deal_stage_history WHERE deal_id IN (SELECT id FROM deals WHERE project_id = ?)').run(id);
+    db.prepare('DELETE FROM deals WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM pipeline_stages WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM pipelines WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM projects WHERE id = ?').run(id);
   });
 

@@ -4,6 +4,7 @@ import { dirname, join } from 'path';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { runMigrations } from './migrations/index.js';
+import { ensureDefaultPipeline } from './lib/pipelines.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const DB_PATH = process.env.DB_PATH || join(__dirname, 'leaddesk.db');
@@ -78,5 +79,6 @@ export function createProject(name, color, icon, createdBy) {
   db.prepare('INSERT INTO projects (id, name, color, icon, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)')
     .run(id, name || 'Untitled', color || '#10b981', icon || '📁', Date.now(), createdBy || null);
   seedStagesForProject(id);
+  ensureDefaultPipeline(db, id);
   return db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
 }

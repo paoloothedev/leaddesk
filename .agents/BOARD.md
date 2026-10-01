@@ -31,16 +31,6 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
 
-### T-022 · Pipelines & deals backend (migration 008)
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P0
-- Files: server/migrations/008-deals.js, server/routes/pipelines.js, server/routes/deals.js (new), server/index.js, server/routes/auth.js (deals.* perms), server/lib/scope.js, server/routes/projects.js, server/test/deals.test.js
-- Depends on: T-020
-- Updated: 2026-10-01 01:15
-- Notes: Spec: PHASE-1-DESIGN § Pipelines & deals. Default pipeline seeded for every workspace (existing + new). Endpoint for moving a deal between stages (records history).
-
 ### T-023 · Contacts UI: Leads → Contacts with lifecycle; Clients = customers view
 - Status: TODO
 - Owner: —
@@ -130,6 +120,15 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Match by phone/email; merge keeps history, tags, campaigns, deals.
 
+### T-033 · Include companies, deals, pipelines, contacts fields in backup export/restore
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P1
+- Files: server/index.js (/api/export, /api/import/backup), server/test/backup.test.js
+- Updated: 2026-10-01 01:25
+- Notes: Export/restore currently only covers leads, stages, tags, campaigns. Keep id remapping for new tables.
+
 ### T-032 · Google Maps import creates companies + contacts
 - Status: TODO
 - Owner: —
@@ -141,6 +140,17 @@ _(none)_
 - Notes: Dedupe company by name+phone within workspace; source='gmaps'.
 
 ## DONE
+
+### T-022 · Pipelines & deals backend (migration 008)
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P0
+- Files: server/migrations/008-deals.js, server/routes/pipelines.js, server/routes/deals.js (new), server/index.js, server/routes/auth.js (deals.* perms), server/lib/scope.js, server/routes/projects.js, server/test/deals.test.js
+- Depends on: T-020
+- Updated: 2026-10-01 01:25
+- Notes: Spec: PHASE-1-DESIGN § Pipelines & deals. Default pipeline seeded for every workspace (existing + new). Endpoint for moving a deal between stages (records history).
+  → Migration 008 (pipelines, stages, deals, history; clients→deals; leads.*→deals.* perms), routes/pipelines.js, routes/deals.js (board, move, won/lost), lib/pipelines.js. Live snapshot: 40 clients → 22 Qualified, 16 Contact made, 2 Lost. test/deals.test.js.
 
 ### T-021 · Companies backend (migration 007, /api/companies)
 - Status: DONE

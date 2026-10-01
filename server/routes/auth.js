@@ -17,6 +17,7 @@ const ALL_PERMISSIONS = [
   'accounts.view', 'accounts.manage',
   'broadcast.view', 'broadcast.manage',
   'projects.manage',
+  'deals.view', 'deals.edit', 'deals.delete',
 ];
 
 const SESSION_DAYS = 30;

@@ -65,6 +65,10 @@ Scoped by `project_id` (see `SCOPED_TABLES` in `db.js`):
 | `import_logs` | id, filename, rows_total, added, skipped, updated, details | |
 | `audit_log` | action, entity_type, entity_id, entity_name, details(JSON), created_at | via `logAudit()` |
 | `settings` | PK (project_id, key), value | e.g. `country_code` |
+| `pipelines` | id (`pipe_…`), name, sort_order | Every workspace has ≥1 (default "Sales", `lib/pipelines.js`) |
+| `pipeline_stages` | id (`pst_…`), pipeline_id, name, color, sort_order, probability 0–100, rot_days, kind (`open/won/lost`) | Deal stages (separate from contact outreach `stages`) |
+| `deals` | id (`deal_…`), pipeline_id, stage_id, title, value, currency, contact_id, company_id, owner_id, expected_close, status (`open/won/lost`), lost_reason, won_at, lost_at, notes, source, custom, created_at, updated_at, stage_changed_at | Migration 008 also converted legacy clients into deals (`source='client-migration'`) |
+| `deal_stage_history` | deal_id, stage_id, account_id, at | Written by `moveDeal()` |
 | `companies` | id (`comp_…`), name, domain (normalised), industry, size, phone, email, website, address, city, country, notes, owner_id, source, custom (JSON), created_at, updated_at | Contacts link via `leads.company_id` (migration 007) |
 
 Join / child tables (scoped through their parent — always verify the parent's project):
@@ -94,6 +98,8 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/accounts` | routes/accounts.js | GET/PUT me, GET / (self + created accounts; includes `projectIds`), POST /, PUT /:id (`permissions`, `projectIds`), DELETE /:id, POST /:id/change-password |
 | `/leads` = `/contacts` | routes/leads.js | GET / (optional `page`/`limit` → `{items,total,page,limit}`, else array; filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, lifecycle (comma list), owner (me/none/id), source, sortBy, sortOrder), GET/PUT/DELETE /:id (body also takes lifecycle, owner_id, source, custom), POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert/lifecycle/owner/company with `value`); list filter `company=<id>|none`; items include `company {id,name}`, POST /import/preview (multer CSV), POST /import/confirm |
 | `/companies` | routes/companies.js | GET / (page/limit, search, owner, industry; items have `contact_count`), GET /:id (+ `contacts`), POST, PUT /:id, DELETE /:id (unlinks contacts), POST /:id/contacts {contactIds}, DELETE /:id/contacts/:contactId |
+| `/pipelines` | routes/pipelines.js | GET / (all pipelines + stages with deal_count/deal_value; any member), POST / {name, stages?}, PUT /:id, DELETE /:id (not last, no deals), POST /:id/stages, PUT /stages/:stageId, DELETE /stages/:stageId?moveTo=, POST /:id/stages/reorder — writes need `settings.edit` |
+| `/deals` | routes/deals.js | GET / (page/limit; pipeline, stage, status, owner, contact, company, search), GET /board?pipeline= (columns with deals + count/total_value/weighted_value), GET /:id (+history), POST, PUT /:id (stage_id change = move), POST /:id/move {stage_id, lost_reason}, DELETE /:id — `deals.*` perms. Moving to a `won` stage makes the contact a `customer`. Items include contact, company, stage, `rotting` |
 | `/stages` | routes/stages.js | CRUD (GET includes `lead_count`) + POST /reorder |
 | `/tags` | routes/tags.js | CRUD (GET includes lead_count) |
 | `/templates` | routes/templates.js | CRUD |

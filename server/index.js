@@ -18,6 +18,8 @@ import emailCampaignsRouter from './routes/emailCampaigns.js';
 import gmapsRouter from './routes/gmaps.js';
 import projectsRouter from './routes/projects.js';
 import companiesRouter from './routes/companies.js';
+import pipelinesRouter from './routes/pipelines.js';
+import dealsRouter from './routes/deals.js';
 import { resolveProject, canAccessProject } from './middleware/project.js';
 import { adoptLegacyJobs, resumePendingJobs } from './gmaps/jobs.js';
 import { startWorker, stopWorker } from './worker/index.js';
@@ -68,6 +70,8 @@ app.use('/api/leads', resolveProject, leadsRouter);
 // Contacts are the same records as leads (see .agents/handoffs/PHASE-1-DESIGN.md)
 app.use('/api/contacts', resolveProject, leadsRouter);
 app.use('/api/companies', resolveProject, companiesRouter);
+app.use('/api/pipelines', resolveProject, pipelinesRouter);
+app.use('/api/deals', resolveProject, dealsRouter);
 app.use('/api/stages', resolveProject, stagesRouter);
 app.use('/api/campaigns', resolveProject, campaignsRouter);
 app.use('/api/tags', resolveProject, tagsRouter);
