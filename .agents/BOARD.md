@@ -20,18 +20,19 @@ _(none)_
 
 ## TODO
 
+## DONE
+
 ### T-006 · Hide UI actions the user lacks permission for
-- Status: TODO
-- Owner: -
+- Status: DONE
+- Owner: lead-claude
 - Role: frontend
 - Priority: P2
 - Files: client/src/components/Sidebar.jsx, LeadsTable.jsx, Campaigns.jsx, Settings.jsx
 - Depends on: T-005
-- Updated: 2026-10-01 01:08
+- Updated: 2026-10-01 01:14
 
 - Notes: Partly done: ProjectPicker hides create/edit/delete, Accounts has workspace picker. Remaining: Sidebar/LeadsTable/Campaigns/Settings should hide actions the user lacks (API already returns 403).
-
-## DONE
+  → client/src/permissions.js can(); Sidebar + Settings tabs + ProjectPicker filtered. Row-level buttons (delete/verify/bulk) still visible → T-019. Not visually checked.
 
 ### T-010 · Re-run gmaps jobs left pending after a restart
 - Status: DONE

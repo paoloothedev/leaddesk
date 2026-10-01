@@ -4,16 +4,17 @@ import {
   ChartLine, Users, Skull, Megaphone, GearSix, Upload,
   SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo, SquaresFour
 } from '@phosphor-icons/react'
+import { can } from '../permissions'
 
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: ChartLine },
-  { id: 'leads', label: 'All Leads', icon: Users },
-  { id: 'clients', label: 'Clients', icon: UserCircle },
-  { id: 'scraper', label: 'Maps Scraper', icon: MagnifyingGlass },
-  { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
-  { id: 'dead', label: 'Dead List', icon: Skull },
-  { id: 'settings', label: 'Settings', icon: GearSix },
-  { id: 'import', label: 'Import', icon: Upload },
+  { id: 'dashboard', label: 'Dashboard', icon: ChartLine, perms: ['dashboard.view', 'leads.view'] },
+  { id: 'leads', label: 'All Leads', icon: Users, perms: ['leads.view'] },
+  { id: 'clients', label: 'Clients', icon: UserCircle, perms: ['leads.view'] },
+  { id: 'scraper', label: 'Maps Scraper', icon: MagnifyingGlass, perms: ['leads.import'] },
+  { id: 'campaigns', label: 'Campaigns', icon: Megaphone, perms: ['campaigns.view'] },
+  { id: 'dead', label: 'Dead List', icon: Skull, perms: ['leads.view'] },
+  { id: 'settings', label: 'Settings', icon: GearSix, perms: [] },
+  { id: 'import', label: 'Import', icon: Upload, perms: ['leads.import'] },
 ]
 
 const containerVariants = {
@@ -91,7 +92,7 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
           animate="visible"
           className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto"
         >
-          {NAV_ITEMS.map(item => {
+          {NAV_ITEMS.filter(item => can(user, ...item.perms)).map(item => {
             const Icon = item.icon
             const isActive = view === item.id
             return (

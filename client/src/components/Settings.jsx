@@ -11,6 +11,7 @@ import WhatsAppPage from './WhatsAppPage'
 import MessageTemplates from './MessageTemplates'
 import Accounts from './Accounts'
 import DashboardConfig from './DashboardConfig'
+import { can } from '../permissions'
 
 const TIMEZONES = [
   'UTC',
@@ -24,18 +25,19 @@ const TIMEZONES = [
 ]
 
 const NAV = [
-  { id: 'general', label: 'General', icon: GearSix },
-  { id: 'account', label: 'Account', icon: UserCircle },
-  { id: 'dashboard', label: 'Dashboard', icon: ChartLine },
-  { id: 'tags', label: 'Tags', icon: Tag },
-  { id: 'stages', label: 'Stages', icon: Signpost },
-  { id: 'whatsapp', label: 'WhatsApp', icon: WhatsappLogo },
-  { id: 'team', label: 'Team', icon: UsersThree },
-  { id: 'backup', label: 'Backup', icon: ClipboardText },
+  { id: 'general', label: 'General', icon: GearSix, perms: ['settings.view', 'settings.edit'] },
+  { id: 'account', label: 'Account', icon: UserCircle, perms: [] },
+  { id: 'dashboard', label: 'Dashboard', icon: ChartLine, perms: ['settings.edit'] },
+  { id: 'tags', label: 'Tags', icon: Tag, perms: ['tags.view', 'tags.edit'] },
+  { id: 'stages', label: 'Stages', icon: Signpost, perms: ['stages.view', 'stages.edit'] },
+  { id: 'whatsapp', label: 'WhatsApp', icon: WhatsappLogo, perms: ['whatsapp.view', 'whatsapp.control', 'templates.view', 'templates.edit'] },
+  { id: 'team', label: 'Team', icon: UsersThree, perms: ['accounts.view', 'accounts.manage'] },
+  { id: 'backup', label: 'Backup', icon: ClipboardText, perms: ['settings.edit'] },
 ]
 
 export default function Settings({ user, ...props }) {
-  const [activeTab, setActiveTab] = useState('general')
+  const tabs = NAV.filter(item => can(user, ...item.perms))
+  const [activeTab, setActiveTab] = useState(() => tabs[0]?.id || 'account')
   const [countryCode, setCountryCode] = useState('')
   const [timezone, setTimezone] = useState('UTC')
   const [metrics, setMetrics] = useState([])
@@ -181,7 +183,7 @@ export default function Settings({ user, ...props }) {
       <div className="flex gap-6 items-start">
         <nav className="w-48 shrink-0 sticky top-4">
           <div className="space-y-0.5">
-            {NAV.map(item => {
+            {tabs.map(item => {
               const Icon = item.icon
               const isActive = activeTab === item.id
               return (
