@@ -145,7 +145,7 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
         if (cancelled) return
         const p = list.find(x => x.id === projectId)
         if (!p) {
-          setProjectError('Project not found')
+          setProjectError('Workspace not found')
           navigate('/', { replace: true })
         } else {
           setProject(p)

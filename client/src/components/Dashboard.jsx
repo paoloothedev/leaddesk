@@ -218,17 +218,17 @@ export default function Dashboard({ stats, loadStats, refreshId, goView, openLea
             <button onClick={() => goView('import')}
               className="w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
               <UploadSimple size={14} weight="bold" />
-              Import leads
+              Import contacts
             </button>
             <button onClick={() => goView('leads')}
               className="w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors active:scale-[0.98]">
               <ListPlus size={14} />
-              Browse leads
+              Browse contacts
             </button>
             <button onClick={() => openLeadModal(null)}
               className="w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors active:scale-[0.98]">
               <Circle size={14} />
-              Add lead
+              Add contact
             </button>
             <button onClick={() => goView('campaigns')}
               className="w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors active:scale-[0.98]">

@@ -10,17 +10,6 @@ by running the code.
 
 ## IN PROGRESS
 
-### T-029 · Workspace UX: rename Project→Workspace in UI; workspace templates (clone setup)
-- Status: IN PROGRESS
-- Owner: lead-claude
-- Role: frontend
-- Priority: P1
-- Files: client/src/components/ProjectPicker.jsx, Sidebar.jsx, server/routes/projects.js (POST /projects/:id/clone-setup)
-- Depends on: T-022, T-025
-- Updated: 2026-10-01 01:43
-- Notes: Clone = stages, tags, templates, pipelines, custom fields, settings (no contacts). Agency onboarding feature (ROADMAP D3).
-  → Backend (POST /projects templateFrom) first; UI rename + template picker later.
-
 ## BLOCKED
 
 _(none)_
@@ -51,6 +40,18 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-029 · Workspace UX: rename Project→Workspace in UI; workspace templates (clone setup)
+- Status: DONE
+- Owner: lead-claude
+- Role: frontend
+- Priority: P1
+- Files: client/src/components/ProjectPicker.jsx, Sidebar.jsx, server/routes/projects.js (POST /projects/:id/clone-setup)
+- Depends on: T-022, T-025
+- Updated: 2026-10-01 02:28
+- Notes: Clone = stages, tags, templates, pipelines, custom fields, settings (no contacts). Agency onboarding feature (ROADMAP D3).
+  → Backend (POST /projects templateFrom) first; UI rename + template picker later.
+  → UI says Workspace everywhere (picker, sidebar, errors), dashboard says contacts; create-workspace modal has 'Copy setup from'. Verified: new workspace from Default got 4 contact fields, 1 deal field, pipeline, 6 tags, 0 contacts. Note: emoji icons show as boxes in headless screenshots only (no emoji font on the box).
 
 ### T-031 · Duplicate detection & merge for contacts
 - Status: DONE

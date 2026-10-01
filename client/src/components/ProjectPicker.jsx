@@ -61,7 +61,8 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
       if (editing) {
         await updateProject(editing.id, form)
       } else {
-        await createProject(form)
+        const { templateFrom, ...rest } = form
+        await createProject(templateFrom ? { ...rest, templateFrom } : rest)
       }
       setModalOpen(false)
       load()
@@ -128,10 +129,10 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         >
           <h1 className="text-2xl md:text-3xl font-semibold text-zinc-900 dark:text-zinc-50 tracking-tight mb-1">
-            Your projects
+            Your workspaces
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-8">
-            Pick a project to jump in — each has its own leads, campaigns, and WhatsApp.
+            Pick a workspace — each client business has its own contacts, deals, campaigns and WhatsApp.
           </p>
 
           {loading ? (
@@ -153,7 +154,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                 <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 group-hover:bg-emerald-500/10 flex items-center justify-center transition-colors">
                   <Plus size={24} weight="bold" />
                 </div>
-                <span className="text-xs font-medium">New project</span>
+                <span className="text-xs font-medium">New workspace</span>
               </motion.button>}
 
               {/* Project cards */}
@@ -183,7 +184,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                             onClick={(e) => openEdit(e, p)}
                             onKeyDown={(e) => e.key === 'Enter' && openEdit(e, p)}
                             className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                            title="Edit project"
+                            title="Edit workspace"
                           >
                             <PencilSimple size={13} />
                           </span>}
@@ -197,7 +198,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                                 ? 'text-red-500 bg-red-50 dark:bg-red-900/30'
                                 : 'text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                             }`}
-                            title={confirmDelete === p.id ? 'Click again to confirm delete' : 'Delete project'}
+                            title={confirmDelete === p.id ? 'Click again to confirm delete' : 'Delete workspace'}
                           >
                             {confirmDelete === p.id ? <Check size={13} /> : <Trash size={13} />}
                           </span>}
@@ -209,7 +210,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                       <div className="mt-auto flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
                         <span className="flex items-center gap-1">
                           <Users size={12} />
-                          {p.leadCount ?? 0} leads
+                          {p.leadCount ?? 0} contacts
                         </span>
                         <span className="flex items-center gap-1">
                           <Megaphone size={12} />
@@ -230,8 +231,8 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
           {projects.length === 0 && !loading && (
             <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-4">
               {canManage
-                ? 'Create your first project to get started.'
-                : "You haven't been added to any project yet — ask your agency admin to give you access."}
+                ? 'Create your first workspace to get started.'
+                : "You haven't been added to any workspace yet — ask your agency admin to give you access."}
             </p>
           )}
         </motion.div>
@@ -257,7 +258,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
             >
               <div className="flex items-center justify-between mb-5">
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {editing ? 'Edit project' : 'New project'}
+                  {editing ? 'Edit workspace' : 'New workspace'}
                 </h2>
                 <button onClick={() => setModalOpen(false)} className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
                   <X size={16} />
@@ -277,7 +278,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                     type="text"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="e.g. Client A Outreach"
+                    placeholder="e.g. Pizza Roma (client)"
                     autoFocus
                     className="w-full h-10 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500"
                   />
@@ -320,13 +321,25 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                   </div>
                 </div>
 
+                {!editing && projects.length > 0 && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Copy setup from</label>
+                    <select value={form.templateFrom || ''} onChange={e => setForm(f => ({ ...f, templateFrom: e.target.value }))}
+                      className="w-full h-10 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500">
+                      <option value="">Start fresh (default stages & pipeline)</option>
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+                    </select>
+                    <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">Copies stages, tags, message templates, pipelines, custom fields and settings — never contacts or deals.</p>
+                  </div>
+                )}
+
                 {/* Preview */}
                 <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ background: form.color + '22' }}>
                     {form.icon}
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{form.name || 'Project name'}</div>
+                    <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{form.name || 'Workspace name'}</div>
                     <div className="text-[10px] text-zinc-400">Preview</div>
                   </div>
                 </div>
@@ -344,7 +357,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                     disabled={busy || !form.name.trim()}
                     className="flex-1 h-10 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {busy ? 'Saving...' : editing ? 'Save changes' : 'Create project'}
+                    {busy ? 'Saving...' : editing ? 'Save changes' : 'Create workspace'}
                   </button>
                 </div>
               </form>

@@ -59,7 +59,7 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
           className={`flex items-center h-14 border-b border-zinc-800 shrink-0 transition-colors hover:bg-zinc-800/50 ${
             sidebarCollapsed ? 'justify-center px-0' : 'px-5 gap-3'
           }`}
-          title="All projects"
+          title="All workspaces"
         >
           {project ? (
             <>
@@ -73,7 +73,7 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
                 <span className="flex flex-col items-start min-w-0">
                   <span className="font-semibold text-xs text-zinc-100 tracking-tight truncate max-w-[140px]">{project.name}</span>
                   <span className="text-[9px] text-zinc-500 flex items-center gap-1">
-                    <SquaresFour size={9} /> All projects
+                    <SquaresFour size={9} /> All workspaces
                   </span>
                 </span>
               )}
