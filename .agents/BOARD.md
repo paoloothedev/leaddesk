@@ -10,6 +10,17 @@ by running the code.
 
 ## IN PROGRESS
 
+### T-031 · Duplicate detection & merge for contacts
+- Status: IN PROGRESS
+- Owner: lead-claude
+- Role: backend
+- Priority: P2
+- Files: server/routes/contacts.js (merge endpoint), server/lib/merge.js, client/src/components/MergeContacts.jsx
+- Depends on: T-020
+- Updated: 2026-10-01 01:44
+- Notes: Match by phone/email; merge keeps history, tags, campaigns, deals.
+  → Backend first (duplicates + merge endpoints); UI later.
+
 ### T-029 · Workspace UX: rename Project→Workspace in UI; workspace templates (clone setup)
 - Status: IN PROGRESS
 - Owner: lead-claude
@@ -92,16 +103,6 @@ _(none)_
 - Depends on: T-020, T-021, T-022
 - Updated: 2026-10-01 01:15
 - Notes: Search contacts, companies, deals in one box; saved filter sets per user.
-
-### T-031 · Duplicate detection & merge for contacts
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P2
-- Files: server/routes/contacts.js (merge endpoint), server/lib/merge.js, client/src/components/MergeContacts.jsx
-- Depends on: T-020
-- Updated: 2026-10-01 01:15
-- Notes: Match by phone/email; merge keeps history, tags, campaigns, deals.
 
 ### T-034 · Retire legacy clients (table, /api/clients, ClientsList/ClientModal)
 - Status: TODO

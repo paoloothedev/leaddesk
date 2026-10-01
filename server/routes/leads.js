@@ -5,6 +5,7 @@ import { getDB, logAudit, DB_PATH } from '../db.js';
 import { ownedIds, isOwned, isProjectMember } from '../lib/scope.js';
 import { pageParams, runPaged, groupBy, sendList } from '../lib/paginate.js';
 import { validateCustom, customFilterSql } from '../lib/customFields.js';
+import { findDuplicates, mergeContacts } from '../lib/merge.js';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
@@ -174,6 +175,24 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
   }));
 
   sendList(res, enriched, total, paging);
+});
+
+// Duplicate groups (same phone digits or email) — registered before /:id
+router.get('/duplicates', requirePermission('leads.view'), (req, res) => {
+  res.json(findDuplicates(getDB(), req.project.id, { limit: Math.min(500, parseInt(req.query.limit) || 100) }));
+});
+
+// Merge duplicates into a primary contact
+router.post('/merge', requirePermission('leads.edit'), (req, res) => {
+  const db = getDB();
+  const pid = req.project.id;
+  const { primaryId, duplicateIds } = req.body;
+  if (!isOwned('leads', pid, primaryId)) return res.status(404).json({ error: 'Primary contact not found' });
+  const ids = ownedIds('leads', pid, duplicateIds).filter(id => id !== primaryId);
+  if (!ids.length) return res.status(400).json({ error: 'No duplicates to merge' });
+  const result = db.transaction(() => mergeContacts(db, pid, primaryId, ids))();
+  logAudit('merge', 'lead', primaryId, '', { merged: ids }, pid);
+  res.json(result);
 });
 
 // Get single lead

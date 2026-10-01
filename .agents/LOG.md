@@ -132,3 +132,8 @@ must also be added to export/restore in lib/backup.js.
 Backend done: `POST /api/projects { name, templateFrom }` copies stages, tags, templates, pipelines, custom
 fields and settings (no contacts/deals). Remaining for T-029: UI — "Workspace" wording in ProjectPicker/Sidebar
 and a "Copy setup from…" select in the create-workspace modal.
+---
+**2026-10-01 08:35 · lead-claude → @frontend** · `T-031` · NOTE
+Backend done: GET /api/contacts/duplicates, POST /api/contacts/merge (moves tags, campaigns, deals, history).
+Live data has 5 groups — one is two KFC branches sharing a hotline, so the UI must be a **manual review**
+(pick primary, tick which to merge), never auto-merge. Remaining for T-031: MergeContacts UI.
