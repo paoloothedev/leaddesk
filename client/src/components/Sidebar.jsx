@@ -30,7 +30,7 @@ const itemVariants = {
   visible: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 20 } }
 }
 
-export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu, user, onLogout, project }) {
+export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu, user, onLogout, project, openSearch }) {
   const navigate = useNavigate()
 
   const goProjects = () => {
@@ -85,6 +85,16 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
             </>
           )}
         </button>
+
+        {openSearch && (
+          <div className="px-2 pt-3">
+            <button onClick={openSearch} title="Search (Ctrl+K)"
+              className={`w-full flex items-center h-9 rounded-lg text-sm text-zinc-400 bg-zinc-800/60 hover:bg-zinc-800 hover:text-zinc-200 transition-colors ${sidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-2.5'}`}>
+              <MagnifyingGlass size={16} className="shrink-0" />
+              {!sidebarCollapsed && <><span className="flex-1 text-left text-xs">Search…</span><kbd className="text-[10px] text-zinc-500 border border-zinc-700 rounded px-1">Ctrl K</kbd></>}
+            </button>
+          </div>
+        )}
 
         <motion.nav
           variants={containerVariants}

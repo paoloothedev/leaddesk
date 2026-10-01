@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, MagnifyingGlass, Handshake, Buildings, User, CalendarBlank, Warning, GearSix } from '@phosphor-icons/react'
 import { getPipelines, getDealsBoard, moveDeal } from '../api'
@@ -36,6 +37,17 @@ export default function DealsBoard({ user, refreshId, showToast, goView }) {
   const [lostPrompt, setLostPrompt] = useState(null) // { deal, stage }
   const [lostReason, setLostReason] = useState('')
   const canEdit = can(user, 'deals.edit')
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // ?deal=<id> (from global search) opens that deal, then cleans the URL
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get('deal')
+    if (id) {
+      setModal({ dealId: id })
+      navigate(location.pathname, { replace: true })
+    }
+  }, [location.search])
 
   useEffect(() => {
     getPipelines().then(list => {

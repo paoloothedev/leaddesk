@@ -20,6 +20,7 @@ import DealsBoard from './components/DealsBoard'
 import CompaniesList from './components/CompaniesList'
 import ContactPage from './components/ContactPage'
 import CompanyPage from './components/CompanyPage'
+import GlobalSearch from './components/GlobalSearch'
 import { getStats, getStages, getTags, getCampaigns, getSettings, getProjects, setCurrentProjectId } from './api'
 
 const pageVariants = {
@@ -126,6 +127,7 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
   const [timezone, setTimezone] = useState(() => localStorage.getItem('timezone') || 'UTC')
   const [project, setProject] = useState(null)
   const [projectError, setProjectError] = useState(null)
+  const [searchOpen, setSearchOpen] = useState(false)
   const toastTimer = useRef(null)
 
   // Derive view from path: /p/:projectId/dashboard → 'dashboard'
@@ -233,6 +235,21 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
     refresh()
   }, [navigate, projectId, refresh])
 
+  // Ctrl/Cmd+K opens global search
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(true) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const onSearchPick = useCallback((kind, id) => {
+    if (kind === 'contact') goView(`contact/${id}`)
+    else if (kind === 'company') goView(`company/${id}`)
+    else if (kind === 'deal') goView(`deals?deal=${id}`)
+  }, [goView])
+
   const openLeadModal = useCallback((id) => {
     setEditingLeadId(id)
     setLeadModalOpen(true)
@@ -307,6 +324,7 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
         user={user}
         onLogout={onLogout}
         project={project}
+        openSearch={() => setSearchOpen(true)}
       />
       <Layout sidebarCollapsed={sidebarCollapsed} openMobileMenu={openMobileMenu}>
         <ClockWidget timezone={timezone} />
@@ -331,6 +349,7 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
         <CampaignModal campId={selectedCampId} stages={stages} close={closeCampModal} showToast={showToast} refresh={refresh} openLeadModal={openLeadModal} />
       )}
 
+      <GlobalSearch open={searchOpen} close={() => setSearchOpen(false)} onPick={onSearchPick} />
       <Toast msg={toastMsg} />
     </div>
   )

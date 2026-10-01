@@ -371,3 +371,17 @@ export function updateCustomField(id, data) {
 export function deleteCustomField(id) {
   return request('/custom-fields/' + id, { method: 'DELETE' });
 }
+
+// ── Search & saved views ────────────────────────────────────────
+export function globalSearch(q) {
+  return request('/search?q=' + encodeURIComponent(q));
+}
+export function getViews(entity) {
+  return request('/views' + (entity ? '?entity=' + entity : ''));
+}
+export function createView(data) {
+  return request('/views', { method: 'POST', body: JSON.stringify(data) });
+}
+export function deleteView(id) {
+  return request('/views/' + id, { method: 'DELETE' });
+}

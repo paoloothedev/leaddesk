@@ -10,17 +10,6 @@ by running the code.
 
 ## IN PROGRESS
 
-### T-030 · Global search (FTS5) + saved views
-- Status: IN PROGRESS
-- Owner: lead-claude
-- Role: backend
-- Priority: P2
-- Files: server/migrations/0xx-search.js, server/routes/search.js, client/src/components/GlobalSearch.jsx
-- Depends on: T-020, T-021, T-022
-- Updated: 2026-10-01 01:45
-- Notes: Search contacts, companies, deals in one box; saved filter sets per user.
-  → Backend first: GET /api/search + /api/views; UI later.
-
 ### T-031 · Duplicate detection & merge for contacts
 - Status: IN PROGRESS
 - Owner: lead-claude
@@ -73,6 +62,19 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-030 · Global search (FTS5) + saved views
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P2
+- Files: server/migrations/0xx-search.js, server/routes/search.js, client/src/components/GlobalSearch.jsx
+- Depends on: T-020, T-021, T-022
+- Updated: 2026-10-01 02:24
+- Notes: Search contacts, companies, deals in one box; saved filter sets per user.
+  → Backend first: GET /api/search + /api/views; UI later.
+  → UI: GlobalSearch (Ctrl+K), saved views + custom-field filters on Contacts.
+  → GlobalSearch (Ctrl/Cmd+K + sidebar button, keyboard nav; deals open via /deals?deal=id), saved views bar + custom-field filters on Contacts. Verified in headless Chromium: search→contact page, search→deal modal, filter Cuisine=Seafood → save view → clear → apply view (1 row).
 
 ### T-028 · Record pages: full-page contact / company / deal views
 - Status: DONE

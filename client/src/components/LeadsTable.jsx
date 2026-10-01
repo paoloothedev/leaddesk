@@ -4,7 +4,7 @@ import {
   MagnifyingGlass, Funnel, CheckCircle, XCircle, Trash,
   ArrowSquareOut, UserPlus, CaretRight, PaperPlaneTilt
 } from '@phosphor-icons/react'
-import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign, getProjectMembers, getCustomFields } from '../api'
+import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign, getProjectMembers, getCustomFields, getViews, createView, deleteView } from '../api'
 import { formatCustomValue } from './CustomFieldInputs'
 import Pagination from './Pagination'
 import { LIFECYCLE } from '../lifecycle'
@@ -49,6 +49,10 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
   const [fOwner, setFOwner] = useState('')
   const [members, setMembers] = useState([])
   const [fieldDefs, setFieldDefs] = useState([])
+  const [fCustom, setFCustom] = useState({})
+  const [views, setViews] = useState([])
+  const [savingView, setSavingView] = useState(false)
+  const [viewName, setViewName] = useState('')
   const [showBulkLifecycle, setShowBulkLifecycle] = useState(false)
   const [showBulkOwner, setShowBulkOwner] = useState(false)
   const [selected, setSelected] = useState(new Set())
@@ -68,6 +72,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
       if (fSocial) params.hasSocial = 'true'
       if (fLifecycle) params.lifecycle = fLifecycle
       if (fOwner) params.owner = fOwner
+      for (const [k, v] of Object.entries(fCustom)) if (v !== '' && v != null) params['cf.' + k] = v
       if (fTag.length) {
         const joined = fTag.join(',')
         if (fTagNot) params.tagNot = joined
@@ -81,9 +86,30 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
       setTotal(data.total)
       setSelected(new Set())
     } catch {}
-  }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner, page, limit])
+  }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner, fCustom, page, limit])
 
-  useEffect(() => { setPage(1) }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner])
+  useEffect(() => { setPage(1) }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner, fCustom])
+
+  // Saved views store the whole filter state
+  const currentFilters = () => ({ search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner, fCustom })
+  const applyFilters = (f = {}) => {
+    setSearch(f.search || ''); setFVerified(f.fVerified || ''); setFPhone(f.fPhone || ''); setFStage(f.fStage || '')
+    setFCampUse(f.fCampUse || ''); setFSocial(!!f.fSocial); setFTag(f.fTag || []); setFTagNot(!!f.fTagNot)
+    setFTagMode(f.fTagMode || 'any'); setFLifecycle(f.fLifecycle || ''); setFOwner(f.fOwner || ''); setFCustom(f.fCustom || {})
+  }
+  const loadViews = () => getViews('contact').then(setViews).catch(() => {})
+  useEffect(() => { loadViews() }, [])
+  const saveView = async () => {
+    if (!viewName.trim()) return
+    try {
+      await createView({ entity: 'contact', name: viewName.trim(), filters: currentFilters() })
+      showToast('View saved.'); setSavingView(false); setViewName(''); loadViews()
+    } catch (err) { showToast(err.message || 'Could not save view.', true) }
+  }
+  const removeView = async (v) => {
+    try { await deleteView(v.id); showToast('View deleted.'); loadViews() } catch (err) { showToast(err.message || 'Failed.', true) }
+  }
+  const filterableDefs = fieldDefs.filter(d => ['select', 'multiselect', 'checkbox', 'user'].includes(d.type))
 
   useEffect(() => {
     getProjectMembers().then(setMembers).catch(() => {})
@@ -181,6 +207,31 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Views:</span>
+        {views.length === 0 && !savingView && <span className="text-[11px] text-zinc-400 dark:text-zinc-500">none yet — set filters, then save them</span>}
+        {views.map(v => (
+          <span key={v.id} className="inline-flex items-center rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
+            <button onClick={() => applyFilters(v.filters)} className="px-2.5 h-7 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+              {v.name}{v.shared ? ' · team' : ''}
+            </button>
+            {v.account_id === user?.id && (
+              <button onClick={() => removeView(v)} aria-label={`Delete view ${v.name}`} className="px-1.5 h-7 text-zinc-400 hover:text-red-500 border-l border-zinc-200 dark:border-zinc-700">×</button>
+            )}
+          </span>
+        ))}
+        {savingView ? (
+          <span className="inline-flex items-center gap-1">
+            <input autoFocus value={viewName} onChange={e => setViewName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveView(); if (e.key === 'Escape') setSavingView(false) }}
+              placeholder="View name" className="h-7 w-36 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-[11px] text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40" />
+            <button onClick={saveView} className="px-2.5 h-7 rounded-md text-[11px] font-medium bg-emerald-500 text-white hover:bg-emerald-600">Save</button>
+            <button onClick={() => setSavingView(false)} className="px-2 h-7 text-[11px] text-zinc-500">Cancel</button>
+          </span>
+        ) : (
+          <button onClick={() => setSavingView(true)} className="px-2.5 h-7 rounded-md text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20">+ Save current filters</button>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="relative">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
@@ -211,6 +262,16 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
           <option value="none">Unassigned</option>
           {members.map(m => <option key={m.id} value={m.id}>{m.display_name || m.username}</option>)}
         </select>
+        {filterableDefs.map(d => (
+          <select key={d.id} value={fCustom[d.key] ?? ''} onChange={e => setFCustom(c => ({ ...c, [d.key]: e.target.value }))}
+            className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
+            <option value="">{d.label}: any</option>
+            {d.type === 'checkbox' && <><option value="true">{d.label}: yes</option><option value="false">{d.label}: no</option></>}
+            {(d.type === 'select' || d.type === 'multiselect') && d.options.map(o => <option key={o} value={o}>{d.label}: {o}</option>)}
+            {d.type === 'user' && members.map(m => <option key={m.id} value={m.id}>{d.label}: {m.display_name || m.username}</option>)}
+            <option value="__empty">{d.label}: empty</option>
+          </select>
+        ))}
         <select value={fCampUse} onChange={e => setFCampUse(e.target.value)}
           className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
           <option value="">Campaign: any</option>
@@ -242,7 +303,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
             </button>
           )}
         </div>
-        <button onClick={() => { setSearch(''); setFVerified(''); setFPhone(''); setFStage(''); setFCampUse(''); setFSocial(false); setFTag([]); setFTagNot(false); setFTagMode('any'); setFLifecycle(''); setFOwner('') }}
+        <button onClick={() => { setSearch(''); setFVerified(''); setFPhone(''); setFStage(''); setFCampUse(''); setFSocial(false); setFTag([]); setFTagNot(false); setFTagMode('any'); setFLifecycle(''); setFOwner(''); setFCustom({}) }}
           className="h-9 px-3 rounded-lg text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
           Clear
         </button>
