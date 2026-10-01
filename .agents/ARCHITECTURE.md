@@ -95,7 +95,7 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | Mount | File | Endpoints |
 |---|---|---|
 | `/auth` | routes/auth.js | POST login, POST logout, GET me, GET permissions |
-| `/projects` | routes/projects.js | GET / (member workspaces + counts), POST / (`projects.manage`), PUT /:id, DELETE /:id (`projects.manage`; cascade delete + removes WA auth dir) |
+| `/projects` | routes/projects.js | GET / (member workspaces + counts), POST / (`projects.manage`; optional `templateFrom: <projectId>` copies that workspace's setup via `lib/workspaceTemplate.js`), GET /:id/members (any member), PUT /:id, DELETE /:id (`projects.manage`; cascade delete + removes WA auth dir) |
 | `/accounts` | routes/accounts.js | GET/PUT me, GET / (self + created accounts; includes `projectIds`), POST /, PUT /:id (`permissions`, `projectIds`), DELETE /:id, POST /:id/change-password |
 | `/leads` = `/contacts` | routes/leads.js | GET / (optional `page`/`limit` → `{items,total,page,limit}`, else array; filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, lifecycle (comma list), owner (me/none/id), source, sortBy, sortOrder), GET/PUT/DELETE /:id (body also takes lifecycle, owner_id, source, custom), POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert/lifecycle/owner/company with `value`); list filter `company=<id>|none`; items include `company {id,name}`, POST /import/preview (multer CSV), POST /import/confirm |
 | `/companies` | routes/companies.js | GET / (page/limit, search, owner, industry; items have `contact_count`), GET /:id (+ `contacts`), POST, PUT /:id, DELETE /:id (unlinks contacts), POST /:id/contacts {contactIds}, DELETE /:id/contacts/:contactId |

@@ -89,3 +89,28 @@ test('workspace members list is visible to members only', async () => {
   assert.ok(names.includes('admin') && names.includes('memberlist'));
   assert.equal((await u.c.get(`/projects/${B}/members`)).status, 404);
 });
+
+test('new workspace can copy another workspace setup (not its data)', async () => {
+  const src = admin.as(A);
+  await src.post('/tags', { name: 'VIP' });
+  await src.post('/templates', { name: 'Intro', content: 'Hi {{name}}' });
+  await src.post('/custom-fields', { entity: 'deal', label: 'Package', type: 'select', options: ['Basic', 'Pro'] });
+  await src.post('/pipelines', { name: 'Onboarding', stages: [{ name: 'Kickoff' }, { name: 'Live', kind: 'won', probability: 100 }] });
+  await src.put('/settings', { key: 'country_code', value: '20' });
+  await src.post('/contacts', { name: 'Private contact', phone: '201000000501' });
+
+  const p = (await admin.post('/projects', { name: 'Client C', templateFrom: A })).body;
+  assert.ok(p.copiedFrom && p.copiedFrom.pipelines === 2);
+  const C = admin.as(p.id);
+  assert.deepEqual((await C.get('/pipelines')).body.map(x => x.name).sort(), ['Onboarding', 'Sales']);
+  assert.ok((await C.get('/tags')).body.some(t => t.name === 'VIP'));
+  assert.ok((await C.get('/templates')).body.some(t => t.name === 'Intro'));
+  assert.equal((await C.get('/custom-fields?entity=deal')).body[0].key, 'package');
+  assert.equal((await C.get('/settings')).body.country_code, '20');
+  assert.equal((await C.get('/contacts')).body.length, 0, 'no data copied');
+  const srcStages = (await src.get('/stages')).body.map(s => s.name);
+  assert.deepEqual((await C.get('/stages')).body.map(s => s.name), srcStages);
+
+  const outsider = await makeUser(admin, 'outsider', ['projects.manage'], [B]);
+  assert.equal((await outsider.c.post('/projects', { name: 'Steal', templateFrom: A })).status, 400);
+});

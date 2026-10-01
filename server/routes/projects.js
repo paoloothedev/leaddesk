@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDB, logAudit, createProject, seedStagesForProject } from '../db.js';
 import { authMiddleware, requirePermission } from './auth.js';
 import { canAccessProject } from '../middleware/project.js';
+import { copySetup } from '../lib/workspaceTemplate.js';
 import { removeProjectAuth } from '../whatsapp.js';
 
 const router = Router();
@@ -48,11 +49,19 @@ router.get('/:id/members', (req, res) => {
 router.post('/', requirePermission('projects.manage'), (req, res) => {
   const { name, color, icon } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' });
-  const project = createProject(name.trim(), color, icon, req.user.id);
-  if (req.user.role !== 'admin') {
-    getDB().prepare('INSERT OR IGNORE INTO project_members (project_id, account_id, created_at) VALUES (?, ?, ?)')
-      .run(project.id, req.user.id, Date.now());
-  }
+  const { templateFrom } = req.body;
+  if (templateFrom && !canAccessProject(req.user, templateFrom)) return res.status(400).json({ error: 'Template workspace not found' });
+  const db = getDB();
+  let copied = null;
+  const project = db.transaction(() => {
+    const p = createProject(name.trim(), color, icon, req.user.id);
+    if (req.user.role !== 'admin') {
+      db.prepare('INSERT OR IGNORE INTO project_members (project_id, account_id, created_at) VALUES (?, ?, ?)').run(p.id, req.user.id, Date.now());
+    }
+    if (templateFrom) copied = copySetup(db, templateFrom, p.id);
+    return p;
+  })();
+  if (copied) project.copiedFrom = { id: templateFrom, ...copied };
   logAudit('create', 'project', project.id, project.name, { by: req.user.id }, project.id);
   res.status(201).json(project);
 });

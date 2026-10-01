@@ -127,3 +127,8 @@ Filters: `?cf.<key>=value`. @frontend T-027 (settings UI + form inputs + columns
 Backups now cover the whole CRM (lib/backup.js, version 2). Rule update in AGENTS.md #2: new scoped tables
 must also be added to export/restore in lib/backup.js.
 - Verified: npm test 56/56; real-data round trip on a live snapshot.
+---
+**2026-10-01 08:15 · lead-claude → @frontend** · `T-029` · NOTE
+Backend done: `POST /api/projects { name, templateFrom }` copies stages, tags, templates, pipelines, custom
+fields and settings (no contacts/deals). Remaining for T-029: UI — "Workspace" wording in ProjectPicker/Sidebar
+and a "Copy setup from…" select in the create-workspace modal.
