@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Pause, Play, Stop, Trash, Broadcast, Clock } from '@phosphor-icons/react'
 import { getJobs, getDailyStatus, pauseJob, resumeJob, stopJob, deleteJob } from '../api'
+import { canI } from '../permissions'
 
 const STATUS_COLORS = {
   pending: 'text-blue-600 dark:text-blue-500',
@@ -155,26 +156,34 @@ export default function BroadcastJobs({ showToast }) {
                         <div className="flex gap-1">
                           {j.status === 'running' && (
                             <>
+                              {canI('broadcast.manage') && (
                               <button onClick={() => handlePause(j.id)}
                                 className="inline-flex items-center justify-center w-7 h-7 rounded text-[10px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.95]">
                                 <Pause size={12} />
                               </button>
+                              )}
+                              {canI('broadcast.manage') && (
                               <button onClick={() => handleStop(j.id)}
                                 className="inline-flex items-center justify-center w-7 h-7 rounded text-[10px] font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.95]">
                                 <Stop size={12} weight="fill" />
                               </button>
+                              )}
                             </>
                           )}
                           {j.status === 'paused' && (
                             <>
+                              {canI('broadcast.manage') && (
                               <button onClick={() => handleResume(j.id)}
                                 className="inline-flex items-center justify-center w-7 h-7 rounded text-[10px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.95]">
                                 <Play size={12} weight="fill" />
                               </button>
+                              )}
+                              {canI('broadcast.manage') && (
                               <button onClick={() => handleStop(j.id)}
                                 className="inline-flex items-center justify-center w-7 h-7 rounded text-[10px] font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.95]">
                                 <Stop size={12} weight="fill" />
                               </button>
+                              )}
                             </>
                           )}
                           {j.status === 'pending' && (
@@ -183,7 +192,7 @@ export default function BroadcastJobs({ showToast }) {
                               Queued
                             </span>
                           )}
-                          {!active && (
+                          {!active && canI('broadcast.manage') && (
                             <button onClick={() => handleDelete(j.id)}
                               className="inline-flex items-center justify-center w-7 h-7 rounded text-[10px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors active:scale-[0.95]">
                               <Trash size={12} />

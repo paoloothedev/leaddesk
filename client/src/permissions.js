@@ -6,3 +6,9 @@ export function can(user, ...perms) {
   const has = user.permissions || []
   return perms.some(p => has.includes(p))
 }
+
+// The logged-in user, set by App during render (same pattern as setCurrentProjectId in api.js),
+// so deep components can check permissions without prop drilling.
+let currentUser = null
+export function setCurrentUser(user) { currentUser = user || null }
+export function canI(...perms) { return can(currentUser, ...perms) }

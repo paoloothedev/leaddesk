@@ -20,15 +20,6 @@ _(none)_
 
 <!-- Phase 1 — core CRM. Spec: .agents/handoffs/PHASE-1-DESIGN.md. Phase 0 is complete. -->
 
-### T-019 · Hide row-level actions the user lacks permission for
-- Status: TODO
-- Owner: —
-- Role: frontend
-- Priority: P2
-- Files: client/src/components/LeadsTable.jsx, DeadList.jsx, Campaigns.jsx, ClientsList.jsx, BroadcastJobs.jsx
-- Updated: 2026-10-01 01:15
-- Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
-
 ### T-034 · Retire legacy clients (table, /api/clients, ClientsList/ClientModal)
 - Status: TODO
 - Owner: —
@@ -40,6 +31,16 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-019 · Hide row-level actions the user lacks permission for
+- Status: DONE
+- Owner: lead-claude
+- Role: frontend
+- Priority: P2
+- Files: client/src/components/LeadsTable.jsx, DeadList.jsx, Campaigns.jsx, ClientsList.jsx, BroadcastJobs.jsx
+- Updated: 2026-10-01 02:31
+- Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
+  → canI() helper (permissions.js, current user set in App); gated: add/verify/delete/bulk actions in Contacts & Dead list, campaign WhatsApp send, broadcast job controls. Verified as a view-only user in headless Chromium.
 
 ### T-029 · Workspace UX: rename Project→Workspace in UI; workspace templates (clone setup)
 - Status: DONE

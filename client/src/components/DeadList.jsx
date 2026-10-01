@@ -5,6 +5,7 @@ import {
   CaretRight, Skull
 } from '@phosphor-icons/react'
 import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign } from '../api'
+import { canI } from '../permissions'
 import Pagination from './Pagination'
 
 const rowVariants = {
@@ -196,14 +197,18 @@ export default function DeadList({ stages, tags, campaigns, refreshId, openLeadM
               <ArrowClockwise size={12} className="mr-1.5" />
               Restore
             </button>
+            {canI('leads.verify') && (
             <button onClick={() => doBulk('verify')}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
               Verify
             </button>
+            )}
+            {canI('leads.edit') && (
             <button onClick={() => setShowBulkStage(!showBulkStage)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Move to stage...
             </button>
+            )}
             {showBulkStage && (
               <select value="" onChange={e => { if (e.target.value) doBulk('stage', e.target.value) }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
@@ -211,10 +216,12 @@ export default function DeadList({ stages, tags, campaigns, refreshId, openLeadM
                 {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
+            {canI('leads.edit') && (
             <button onClick={() => setShowBulkTag(!showBulkTag)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Assign tag...
             </button>
+            )}
             {showBulkTag && (
               <select value="" onChange={e => { if (e.target.value) { doBulk('tag', null, e.target.value); setShowBulkTag(false) } }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
@@ -222,10 +229,12 @@ export default function DeadList({ stages, tags, campaigns, refreshId, openLeadM
                 {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
+            {canI('campaigns.edit') && (
             <button onClick={() => setShowBulkCampaign(!showBulkCampaign)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Add to campaign...
             </button>
+            )}
             {showBulkCampaign && (
               <select value="" onChange={e => { if (e.target.value) handleAddToCampaign(e.target.value) }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
@@ -317,10 +326,12 @@ export default function DeadList({ stages, tags, campaigns, refreshId, openLeadM
                           className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.95]">
                           <CaretRight size={12} />
                         </button>
+                        {canI('leads.delete') && (
                         <button onClick={() => handleDeleteRow(l.id, l.name)}
                           className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium border border-red-200 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.95]">
                           <Trash size={12} />
                         </button>
+                        )}
                       </div>
                     </td>
                   </motion.tr>

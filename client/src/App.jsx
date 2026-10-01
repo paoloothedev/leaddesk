@@ -22,6 +22,7 @@ import ContactPage from './components/ContactPage'
 import CompanyPage from './components/CompanyPage'
 import GlobalSearch from './components/GlobalSearch'
 import Duplicates from './components/Duplicates'
+import { setCurrentUser } from './permissions'
 import { getStats, getStages, getTags, getCampaigns, getSettings, getProjects, setCurrentProjectId } from './api'
 
 const pageVariants = {
@@ -67,6 +68,8 @@ export default function App() {
     setUser(null)
     setCurrentProjectId(null)
   }, [])
+
+  setCurrentUser(user)
 
   if (!authChecked) return null
 

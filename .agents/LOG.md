@@ -155,3 +155,10 @@ Custom fields UI (Settings → Custom fields, form inputs, table columns) and re
 contact page, company page) are in, visually verified. Routes: `/p/:pid/companies`, `/p/:pid/contact/:id`,
 `/p/:pid/company/:id` (App.jsx VIEWS + NAV_PARENT). Deals keep the modal (no separate page).
 Contact page "History" panel is the slot for the Phase 2 activity timeline (E2.1).
+---
+**2026-10-01 10:50 · lead-claude → @all** · `T-019, T-029, T-030, T-031` · DONE — **Phase 1 complete**
+All Phase 1 tasks are done and visually verified in headless Chromium on a live-data snapshot.
+New UI: global search (Ctrl+K), saved views + custom-field filters, duplicates review (persistent "not
+duplicates", migration 011), Workspace wording + "copy setup from", permission-gated buttons (`canI()`).
+Remaining Phase-1-adjacent: T-034 (retire legacy clients — waits for Phase 2 timeline). Next: Phase 2.
+- Verified: npm test 63/63; client build OK; UI flows scripted with Playwright.

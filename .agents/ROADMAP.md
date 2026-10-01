@@ -52,7 +52,7 @@ Everything later depends on this. No new features until done.
 - **E0.7 Project membership**: `project_members(project_id, account_id, role)`; `resolveProject` checks
   membership; admins see all.
 
-## Phase 1 — Core CRM data model ← **current phase** (tasks T-020…T-032, spec `handoffs/PHASE-1-DESIGN.md`)
+## Phase 1 — Core CRM data model ✅ done 2026-10-01 (T-019…T-033; spec `handoffs/PHASE-1-DESIGN.md`)
 
 - **E1.1 Contacts (merge leads + clients)**: one `contacts` table with `lifecycle_stage`
   (`lead → qualified → customer → churned`, plus `dead`). Migrate `leads` and `clients` into it, keep ids.
@@ -75,7 +75,7 @@ Everything later depends on this. No new features until done.
   companies, deals (SQLite FTS5).
 - **E1.9 Dedupe & merge**: detect duplicates by phone/email/domain, merge two records keeping history.
 
-## Phase 2 — Activities & productivity
+## Phase 2 — Activities & productivity ← **next phase**
 
 - **E2.1 Unified timeline**: `activities(entity_type, entity_id, type, body, meta, account_id, created_at)` —
   notes, calls (with outcome & duration), meetings, stage changes, messages, emails, system events.

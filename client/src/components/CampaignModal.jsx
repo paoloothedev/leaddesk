@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { X, Copy, Plus, Trash, CaretRight, PaperPlaneTilt, UserPlus, MagnifyingGlass } from '@phosphor-icons/react'
 import { getCampaigns, deleteCampaign, addLeadsToCampaign, removeLeadFromCampaign, bulkAction } from '../api'
+import { canI } from '../permissions'
 import WhatsAppSend from './WhatsAppSend'
 
 export default function CampaignModal({ campId, stages, close, showToast, refresh, openLeadModal }) {
@@ -144,7 +145,7 @@ export default function CampaignModal({ campId, stages, close, showToast, refres
               <Plus size={14} weight="bold" />
               Add more leads
             </button>
-            {(campaign.leads || []).some(l => l.phone) && (
+            {(campaign.leads || []).some(l => l.phone) && canI('campaigns.send') && (
               <button onClick={() => setShowWhatsApp(true)} className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-[11px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
                 <PaperPlaneTilt size={14} weight="fill" />
                 Send WhatsApp

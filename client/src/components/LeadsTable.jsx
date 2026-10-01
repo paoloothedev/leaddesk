@@ -5,6 +5,7 @@ import {
   ArrowSquareOut, UserPlus, CaretRight, PaperPlaneTilt
 } from '@phosphor-icons/react'
 import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign, getProjectMembers, getCustomFields, getViews, createView, deleteView } from '../api'
+import { canI } from '../permissions'
 import { formatCustomValue } from './CustomFieldInputs'
 import Pagination from './Pagination'
 import { LIFECYCLE } from '../lifecycle'
@@ -196,11 +197,13 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
           className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
           Find duplicates
         </button>
+        {canI('leads.edit') && (
         <button onClick={() => openLeadModal(null)}
           className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
           <UserPlus size={14} weight="bold" />
           Add contact
         </button>
+        )}
         </div>
       </div>
 
@@ -325,15 +328,19 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
             </label>
             <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{selected.size} selected</span>
             <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+            {canI('leads.verify') && (
             <button onClick={() => doBulk('verify')}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
               <CheckCircle size={12} className="mr-1.5" />
               Verify
             </button>
+            )}
+            {canI('leads.edit') && (
             <button onClick={() => setShowBulkStage(!showBulkStage)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Move to stage...
             </button>
+            )}
             {showBulkStage && (
               <select value="" onChange={e => { if (e.target.value) doBulk('stage', e.target.value) }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
@@ -341,10 +348,12 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                 {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
+            {canI('leads.edit') && (
             <button onClick={() => setShowBulkTag(!showBulkTag)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Assign tag...
             </button>
+            )}
             {showBulkTag && (
               <select value="" onChange={e => { if (e.target.value) { doBulk('tag', null, e.target.value); setShowBulkTag(false) } }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
@@ -352,19 +361,25 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                 {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
+            {canI('leads.edit') && (
             <button onClick={() => doBulk('dead')}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-100 transition-colors active:scale-[0.98]">
               Mark dead
             </button>
+            )}
+            {canI('leads.delete') && (
             <button onClick={() => { if (confirm(`Delete ${selected.size} leads permanently?`)) doBulk('delete') }}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.98]">
               <Trash size={12} className="mr-1.5" />
               Delete
             </button>
+            )}
+            {canI('leads.edit') && (
             <button onClick={() => setShowBulkLifecycle(!showBulkLifecycle)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 transition-colors">
               Set lifecycle...
             </button>
+            )}
             {showBulkLifecycle && (
               <select value="" onChange={e => { if (e.target.value) { doBulk('lifecycle', null, null, e.target.value); setShowBulkLifecycle(false) } }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
@@ -372,10 +387,12 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                 {Object.entries(LIFECYCLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             )}
+            {canI('leads.edit') && (
             <button onClick={() => setShowBulkOwner(!showBulkOwner)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Assign owner...
             </button>
+            )}
             {showBulkOwner && (
               <select value="" onChange={e => { if (e.target.value) { doBulk('owner', null, null, e.target.value === '__none' ? null : e.target.value); setShowBulkOwner(false) } }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
@@ -384,10 +401,12 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                 {members.map(m => <option key={m.id} value={m.id}>{m.display_name || m.username}</option>)}
               </select>
             )}
+            {canI('campaigns.edit') && (
             <button onClick={() => setShowBulkCampaign(!showBulkCampaign)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
               Add to campaign...
             </button>
+            )}
             {showBulkCampaign && (
               <select value="" onChange={e => { if (e.target.value) handleAddToCampaign(e.target.value) }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
@@ -395,11 +414,13 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                 {(campaigns || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}
+            {canI('campaigns.send') && (
             <button onClick={() => setShowBulkWhatsApp(true)}
               className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
               <PaperPlaneTilt size={12} className="mr-1.5" weight="fill" />
               Send WhatsApp
             </button>
+            )}
           </div>
         </div>
       )}
@@ -513,7 +534,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                     <td className="py-3 px-4 text-xs text-zinc-500 dark:text-zinc-400 max-w-[90px] truncate">{(l.notes || '').slice(0, 40)}{(l.notes || '').length > 40 ? '...' : ''}</td>
                     <td className="py-3 px-4">
                       <div className="flex gap-1">
-                        {!l.verified && (
+                        {!l.verified && canI('leads.verify') && (
                           <button onClick={() => quickVerify(l.id)}
                             className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors active:scale-[0.95]">
                             <CheckCircle size={12} />
@@ -523,10 +544,12 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                           className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.95]">
                           <CaretRight size={12} />
                         </button>
+                        {canI('leads.delete') && (
                         <button onClick={() => handleDeleteRow(l.id, l.name)}
                           className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium border border-red-200 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.95]">
                           <Trash size={12} />
                         </button>
+                        )}
                       </div>
                     </td>
                   </motion.tr>
