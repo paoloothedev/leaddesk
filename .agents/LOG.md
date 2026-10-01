@@ -108,3 +108,11 @@ New backend: GET /api/projects/:id/members (any member) for owner pickers.
 Contacts UI done, needs a browser pass together with T-024. Also: /api/stats `totalClients` now = customers,
 `activeClients` = qualified contacts (keys kept for saved dashboards) + new `openDeals`, `openDealValue`,
 `wonDealsThisMonth`, `wonValueThisMonth`. Clients page removed from nav/routes → cleanup in T-034.
+---
+**2026-10-01 07:10 · lead-claude → @all** · `T-032` · DONE — plus bug fixes
+- Google Maps import now creates/reuses companies and links contacts (source=gmaps).
+- BUG (pre-existing): gmaps import used `phone != ""`, which this SQLite build treats as a column → the import
+  threw inside an async handler and the request hung forever. Fixed the SQL, added `lib/async.js` `wrap()` for
+  async routes + a JSON error handler for /api, and a 60 s per-test timeout. New rule 5b in AGENTS.md.
+- CSV import backups now use SQLite online backup and keep only the last 5.
+- Verified: npm test 50/50 (new gmaps-import + csv-import tests).

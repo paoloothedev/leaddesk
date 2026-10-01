@@ -397,6 +397,13 @@ io.on('connection', (socket) => {
   });
 });
 
+// JSON errors for API routes (async handlers must use lib/async.js wrap() to reach this)
+app.use('/api', (err, req, res, next) => {
+  console.error(`[api] ${req.method} ${req.originalUrl}:`, err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 // Serve static in production
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';

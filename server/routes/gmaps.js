@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { wrap } from '../lib/async.js';
 import { requirePermission } from './auth.js';
 import { createJob, getJob, listJobs, deleteJob } from '../gmaps/jobs.js';
 import { getDB, logAudit } from '../db.js';
@@ -155,7 +156,7 @@ router.get('/jobs/:id/download', requirePermission('leads.import'), (req, res) =
   res.send(csv);
 });
 
-router.post('/jobs/:id/import', requirePermission('leads.import'), async (req, res) => {
+router.post('/jobs/:id/import', requirePermission('leads.import'), wrap(async (req, res) => {
   const job = getJob(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   if (job.status !== 'completed') return res.status(400).json({ error: 'Job not completed' });
@@ -188,7 +189,22 @@ router.post('/jobs/:id/import', requirePermission('leads.import'), async (req, r
   const findTag = db.prepare('SELECT id FROM tags WHERE name = ? AND project_id = ?');
   const createTag = db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)');
 
-  const findLeadByPhone = db.prepare('SELECT id FROM leads WHERE phone = ? AND phone != "" AND project_id = ?');
+  // Every Maps result is a business: reuse the workspace's company with the same phone (or name), else create it.
+  const findCompanyByPhone = db.prepare("SELECT id FROM companies WHERE project_id = ? AND phone = ? AND phone != ''");
+  const findCompanyByName = db.prepare('SELECT id FROM companies WHERE project_id = ? AND LOWER(name) = LOWER(?)');
+  const insertCompany = db.prepare(`INSERT INTO companies (id, project_id, name, phone, website, domain, industry, address, notes, source, owner_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'gmaps', ?, ?, ?)`);
+  const linkCompany = db.prepare('UPDATE leads SET company_id = ? WHERE id = ?');
+  const companyFor = (r, name, phone, website, notes) => {
+    const existing = (phone && findCompanyByPhone.get(projectId, phone)) || findCompanyByName.get(projectId, name);
+    if (existing) return existing.id;
+    const id = 'comp_' + crypto.randomBytes(6).toString('hex');
+    const domain = website ? website.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '') : '';
+    insertCompany.run(id, projectId, name, phone || '', website || '', domain, r.category || '', r.address || '', notes, req.user?.id || null, now, now);
+    return id;
+  };
+
+  const findLeadByPhone = db.prepare("SELECT id FROM leads WHERE phone = ? AND phone != '' AND project_id = ?");
   const findLeadByName = db.prepare('SELECT id FROM leads WHERE name = ? AND project_id = ?');
 
   const importTx = db.transaction(() => {
@@ -225,6 +241,8 @@ router.post('/jobs/:id/import', requirePermission('leads.import'), async (req, r
         leadStatus === 'dead' ? now : null, projectId
       );
       insertStageHistory.run(leadId, defaultStage, now);
+      const social = /facebook|instagram|tiktok/i.test(website);
+      linkCompany.run(companyFor(r, name, phone, social ? '' : website, notes), leadId);
 
       if (r.category) {
         let tag = findTag.get(r.category, projectId);
@@ -282,7 +300,7 @@ router.post('/jobs/:id/import', requirePermission('leads.import'), async (req, r
   }
 
   res.json({ added, skipped, total: results.length, waResults });
-});
+}));
 
 function isMaybeClosed(r) {
   if (r.status && (String(r.status).toLowerCase().includes('closed') || String(r.status).toLowerCase().includes('permanently'))) return true;

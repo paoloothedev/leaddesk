@@ -63,16 +63,6 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Spec: PHASE-1-DESIGN § Custom fields. Validation helper used by all three entity routes.
 
-### T-026 · Record owners: owner filters, default owner, bulk assign
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P1
-- Files: server/routes/contacts.js, companies.js, deals.js, server/test/owners.test.js
-- Depends on: T-020, T-021, T-022
-- Updated: 2026-10-01 01:15
-- Notes: owner=me|<id>|none filter; owner must be workspace member.
-
 ### T-027 · Custom fields UI (settings + forms + table columns)
 - Status: TODO
 - Owner: —
@@ -141,17 +131,29 @@ _(none)_
 - Updated: 2026-10-01 01:31
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
+## DONE
+
 ### T-032 · Google Maps import creates companies + contacts
-- Status: TODO
-- Owner: —
+- Status: DONE
+- Owner: lead-claude
 - Role: integrations
 - Priority: P1
 - Files: server/routes/gmaps.js
 - Depends on: T-021
-- Updated: 2026-10-01 01:15
+- Updated: 2026-10-01 01:39
 - Notes: Dedupe company by name+phone within workspace; source='gmaps'.
+  → Maps import creates/reuses a company per business (by phone, else name) and links the contact; also fixed a pre-existing crash (SQL "" literal) that made the Maps import hang on this build. test/gmaps-import.test.js + csv-import.test.js.
 
-## DONE
+### T-026 · Record owners: owner filters, default owner, bulk assign
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P1
+- Files: server/routes/contacts.js, companies.js, deals.js, server/test/owners.test.js
+- Depends on: T-020, T-021, T-022
+- Updated: 2026-10-01 01:32
+- Notes: owner=me|<id>|none filter; owner must be workspace member.
+  → Delivered inside T-020/T-021/T-022: creator = default owner; owner=me|none|id filters on contacts, companies, deals; owner must be workspace member (isProjectMember); bulk assign on contacts. Tested in contacts/companies/deals tests.
 
 ### T-022 · Pipelines & deals backend (migration 008)
 - Status: DONE

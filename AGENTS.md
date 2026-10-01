@@ -91,6 +91,9 @@ Native modules (`better-sqlite3`, `bcrypt`) must be built for the OS you run on 
 4. **Always parameterised SQL** (`db.prepare('… ?').run(x)`). No string interpolation of user input
    (there is one legacy exception in `index.js` `/api/import/backup` — do not copy it).
 5. **Call `logAudit(action, entityType, id, name, details, projectId)`** on create/edit/delete of user data.
+5b. **Async route handlers must be wrapped** with `wrap()` from `server/lib/async.js` (Express 4 otherwise
+   leaves the request hanging on a thrown error). SQL string literals use single quotes (`!= ''`) — this
+   SQLite build rejects `""` as a string.
 6. **Frontend talks to the server only via `client/src/api.js`.** Add a function there; never `fetch('/api/…')`
    in components (exceptions: auth bootstrap in `App.jsx`).
 7. **Never commit or print secrets/data:** `server/*.db*`, `server/baileys_auth/**` (WhatsApp session keys),

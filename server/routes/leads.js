@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { wrap } from '../lib/async.js';
 import { requirePermission, hasPermission } from './auth.js';
 import { getDB, logAudit, DB_PATH } from '../db.js';
 import { ownedIds, isOwned, isProjectMember } from '../lib/scope.js';
@@ -368,7 +369,7 @@ router.post('/import/preview', requirePermission('leads.import'), upload.single(
 });
 
 // Import confirm — with update mode
-router.post('/import/confirm', requirePermission('leads.import'), async (req, res) => {
+router.post('/import/confirm', requirePermission('leads.import'), wrap(async (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { rows, skipDupes, updateMode, checkWhatsApp, filename } = req.body;
@@ -385,11 +386,16 @@ router.post('/import/confirm', requirePermission('leads.import'), async (req, re
     if (row.phone) row.phone = normalizePhone(row.phone, countryCode);
   }
 
-  // Auto-backup DB before import
+  // Auto-backup DB before import (online backup is consistent in WAL mode); keep the 5 most recent
   try {
-    const backupPath = DB_PATH + '.backup.' + now;
-    fs.copyFileSync(DB_PATH, backupPath);
-  } catch {}
+    await db.backup(DB_PATH + '.backup.' + now);
+    const dir = path.dirname(DB_PATH);
+    const base = path.basename(DB_PATH) + '.backup.';
+    const old = fs.readdirSync(dir).filter(f => f.startsWith(base)).sort().slice(0, -5);
+    for (const f of old) fs.rmSync(path.join(dir, f), { force: true });
+  } catch (err) {
+    console.error('[import] pre-import backup failed:', err.message);
+  }
 
   const insertActive = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, project_id, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'active', 0, ?, ?, ?, 'csv')`);
   const insertDead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'dead', 0, ?, ?, ?, ?, 'csv')`);
@@ -484,7 +490,7 @@ router.post('/import/confirm', requirePermission('leads.import'), async (req, re
   logAudit('import', 'import', importId, filename || 'unknown.csv', { added, skipped, updated, rows: rows.length }, projectId);
 
   res.json({ added, skipped, updated, waResults });
-});
+}));
 
 function parseCSV(text) {
   const lines = text.split('\n');
