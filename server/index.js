@@ -64,6 +64,8 @@ app.use('/api', authMiddleware);
 
 // ── Project-scoped routers ──────────────────────────────────────
 app.use('/api/leads', resolveProject, leadsRouter);
+// Contacts are the same records as leads (see .agents/handoffs/PHASE-1-DESIGN.md)
+app.use('/api/contacts', resolveProject, leadsRouter);
 app.use('/api/stages', resolveProject, stagesRouter);
 app.use('/api/campaigns', resolveProject, campaignsRouter);
 app.use('/api/tags', resolveProject, tagsRouter);

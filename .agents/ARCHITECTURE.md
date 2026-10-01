@@ -54,13 +54,13 @@ Scoped by `project_id` (see `SCOPED_TABLES` in `db.js`):
 | Table | Key columns | Notes |
 |---|---|---|
 | `projects` | id (`proj_<12hex>`), name, color, icon, created_at, created_by | Not scoped (it *is* the scope) |
-| `leads` | id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status (`active`/`dead`), verified, stage_id, created_at, dead_at | `location` holds the Google Maps link |
+| `leads` (= **contacts**) | id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status (`active`/`dead`), verified, stage_id, created_at, dead_at, **lifecycle** (`lead/qualified/customer/churned`), owner_id, company_id, source (`manual/csv/gmaps/…`), custom (JSON), updated_at | `location` holds the Google Maps link. Served by both `/api/leads` and `/api/contacts` |
 | `stages` | id, name, color, sort_order | Default 5 seeded per project; ids `s1_<suffix>` (PK is global!) |
 | `tags` | id, name, color, created_at, show_in_dashboard | |
 | `campaigns` | id, name, created_at | WhatsApp lead groups |
 | `message_templates` | id, name, content | |
 | `broadcast_jobs` | id (`job_…`), campaign_id, message (string **or JSON array** = multi-message sequence), status (`pending/running/paused/stopped/completed`), total, sent, failed, timestamps | |
-| `clients` | id, lead_id, name, …contact fields, status, stage (text), source, assigned_to, created_at, updated_at | |
+| `clients` | id, lead_id, name, …contact fields, status, stage (text), source, assigned_to, created_at, updated_at | **Legacy** — merged into `leads` by migration 006 (`client_contact_map(client_id, contact_id)`); still used by the Clients page until T-023 |
 | `email_campaigns` | id, name, subject, body, status (`draft`…), counters | No sender implemented |
 | `import_logs` | id, filename, rows_total, added, skipped, updated, details | |
 | `audit_log` | action, entity_type, entity_id, entity_name, details(JSON), created_at | via `logAudit()` |
@@ -91,7 +91,7 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/auth` | routes/auth.js | POST login, POST logout, GET me, GET permissions |
 | `/projects` | routes/projects.js | GET / (member workspaces + counts), POST / (`projects.manage`), PUT /:id, DELETE /:id (`projects.manage`; cascade delete + removes WA auth dir) |
 | `/accounts` | routes/accounts.js | GET/PUT me, GET / (self + created accounts; includes `projectIds`), POST /, PUT /:id (`permissions`, `projectIds`), DELETE /:id, POST /:id/change-password |
-| `/leads` | routes/leads.js | GET / (optional `page`/`limit` → `{items,total,page,limit}`, else array; filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder), GET/PUT/DELETE /:id, POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert), POST /import/preview (multer CSV), POST /import/confirm |
+| `/leads` = `/contacts` | routes/leads.js | GET / (optional `page`/`limit` → `{items,total,page,limit}`, else array; filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, lifecycle (comma list), owner (me/none/id), source, sortBy, sortOrder), GET/PUT/DELETE /:id (body also takes lifecycle, owner_id, source, custom), POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert/lifecycle/owner with `value`), POST /import/preview (multer CSV), POST /import/confirm |
 | `/stages` | routes/stages.js | CRUD (GET includes `lead_count`) + POST /reorder |
 | `/tags` | routes/tags.js | CRUD (GET includes lead_count) |
 | `/templates` | routes/templates.js | CRUD |

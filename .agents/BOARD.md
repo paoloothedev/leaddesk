@@ -31,15 +31,6 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
 
-### T-020 · Contacts: merge clients into leads (migration 006) + /api/contacts
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P0
-- Files: server/migrations/006-contacts.js, server/routes/contacts.js (new), server/routes/clients.js (shim), server/index.js, server/lib/scope.js, server/test/contacts.test.js
-- Updated: 2026-10-01 01:15
-- Notes: Spec: handoffs/PHASE-1-DESIGN.md § Contacts. Test the migration on a copy of the live DB (40 clients in Default) and on the legacy DB.
-
 ### T-021 · Companies backend (migration 007, /api/companies)
 - Status: TODO
 - Owner: —
@@ -160,6 +151,16 @@ _(none)_
 - Notes: Dedupe company by name+phone within workspace; source='gmaps'.
 
 ## DONE
+
+### T-020 · Contacts: merge clients into leads (migration 006) + /api/contacts
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P0
+- Files: server/migrations/006-contacts.js, server/routes/contacts.js (new), server/routes/clients.js (shim), server/index.js, server/lib/scope.js, server/test/contacts.test.js
+- Updated: 2026-10-01 01:20
+- Notes: Spec: handoffs/PHASE-1-DESIGN.md § Contacts. Test the migration on a copy of the live DB (40 clients in Default) and on the legacy DB.
+  → Migration 006 (leads gets lifecycle/owner_id/company_id/source/custom/updated_at; clients merged via client_contact_map). /api/contacts = leads router. Verified on live snapshot + legacy DB (40 clients → 40 existing leads marked qualified, no dupes). test/contacts.test.js.
 
 ### T-006 · Hide UI actions the user lacks permission for
 - Status: DONE

@@ -78,3 +78,11 @@ Phase 0 is complete (all on branch `phase-0-foundation`, not merged to main, not
 into T-020…T-032 with a shared spec in `.agents/handoffs/PHASE-1-DESIGN.md`. Critical path:
 T-020 (contacts) → T-021 (companies) + T-022 (deals) in parallel → T-023/T-024 UI → T-025…T-028.
 Backend agents: start with T-020. Frontend agents: T-019 is free now; T-023 once T-020 is in REVIEW.
+---
+**2026-10-01 04:30 · lead-claude → @all** · `T-020` · DONE / CONTRACT
+- `/api/contacts` is live (same router & records as `/api/leads`). New fields: lifecycle, owner_id, company_id
+  (no validation until T-021), source, custom (object), updated_at. Filters: lifecycle, owner=me|none|id, source.
+  Bulk actions: lifecycle, owner (`value`). Creator is default owner on POST.
+- Clients: migration 006 merged them into contacts; `/api/clients` still reads the legacy table until T-023.
+  Design note updated (client stage → deal in T-022).
+- Verified: npm test 35/35; migration on live snapshot + legacy DB.

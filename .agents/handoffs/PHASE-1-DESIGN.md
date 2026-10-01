@@ -23,10 +23,18 @@ Add to `leads`:
   `source TEXT DEFAULT ''` (`gmaps`, `csv`, `manual`, `form`, `whatsapp`…), `custom TEXT NOT NULL DEFAULT '{}'`
   (custom field values, JSON), `updated_at INTEGER`.
 
+**Revised during T-020 (lead-claude):** the old "client" was a lead being worked in a mini sales pipeline
+(`clients.stage` = new/contacted/interested/negotiating/closed/lost), not necessarily a paying customer. So:
+lifecycle = `customer` if `clients.stage = 'closed'`, else `qualified` (never downgrade). The client's stage is
+turned into a **deal** by T-022 (via `client_contact_map`): new→Qualified, contacted→Contact made,
+interested→Proposal, negotiating→Negotiation, closed→Won, lost→Lost. Until T-023 ships, `/api/clients` keeps
+working on the old table (legacy), and "Convert to CRM" also marks the contact `qualified`.
+`/api/contacts` is the **same router as `/api/leads`** (routes/leads.js mounted twice) — no duplicate code.
+
 Data migration of `clients`:
-1. Client with `lead_id` that exists → update that lead: `lifecycle='customer'`, fill empty contact fields from the
+1. Client with `lead_id` that exists → update that lead: lifecycle per the rule above, fill empty contact fields from the
    client, `owner_id = assigned_to`, append client notes; copy `client_tags` → `lead_tags`.
-2. Client without a lead → insert a new `leads` row (same project, `lifecycle='customer'`, `stage_id` = first
+2. Client without a lead → insert a new `leads` row (same project, lifecycle per the rule above, `stage_id` = first
    stage of the project, `source = client.source or 'manual'`).
 3. Keep a mapping table `client_contact_map(client_id, contact_id)` so `client_activities` can be moved to the
    Phase 2 timeline later. **Do not drop `clients`** in this migration (rollback safety); it becomes read-only.

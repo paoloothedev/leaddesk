@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requirePermission, hasPermission } from './auth.js';
 import { getDB, logAudit, DB_PATH } from '../db.js';
-import { ownedIds, isOwned } from '../lib/scope.js';
+import { ownedIds, isOwned, isProjectMember } from '../lib/scope.js';
 import { pageParams, runPaged, groupBy, sendList } from '../lib/paginate.js';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
@@ -23,11 +23,43 @@ try {
   waGetStatus = wa.getStatus;
 } catch {}
 
-// List leads
+export const LIFECYCLES = ['lead', 'qualified', 'customer', 'churned'];
+
+// Validates the contact-level fields (lifecycle, owner, source, custom) present in `body`.
+// Returns { error } or { sets } where sets is a column → value map ready for an UPDATE.
+function contactFields(body, projectId) {
+  const sets = {};
+  if (body.lifecycle !== undefined) {
+    if (!LIFECYCLES.includes(body.lifecycle)) return { error: 'Invalid lifecycle' };
+    sets.lifecycle = body.lifecycle;
+  }
+  if (body.owner_id !== undefined) {
+    if (body.owner_id !== null && !isProjectMember(projectId, body.owner_id)) return { error: 'Owner must be a member of this workspace' };
+    sets.owner_id = body.owner_id;
+  }
+  if (body.source !== undefined) sets.source = String(body.source || '').slice(0, 50);
+  if (body.custom !== undefined) {
+    if (!body.custom || typeof body.custom !== 'object' || Array.isArray(body.custom)) return { error: 'custom must be an object' };
+    sets.custom = JSON.stringify(body.custom);
+  }
+  return { sets };
+}
+
+function applySets(db, id, sets) {
+  const cols = Object.keys(sets);
+  if (!cols.length) return;
+  db.prepare(`UPDATE leads SET ${cols.map(c => `${c} = ?`).join(', ')} WHERE id = ?`).run(...cols.map(c => sets[c]), id);
+}
+
+function parseCustom(l) {
+  try { return JSON.parse(l.custom || '{}'); } catch { return {}; }
+}
+
+// List leads / contacts
 router.get('/', requirePermission('leads.view'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
-  const { search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder } = req.query;
+  const { search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder, lifecycle, owner, source } = req.query;
 
   let sql = 'SELECT * FROM leads WHERE project_id = ?';
   const params = [projectId];
@@ -47,6 +79,17 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
   if (stage) {
     sql += ' AND stage_id = ?'; params.push(stage);
   }
+
+  if (lifecycle) {
+    const list = String(lifecycle).split(',').filter(l => LIFECYCLES.includes(l));
+    if (list.length) { sql += ` AND lifecycle IN (${list.map(() => '?').join(',')})`; params.push(...list); }
+  }
+
+  if (owner === 'me') { sql += ' AND owner_id = ?'; params.push(req.user.id); }
+  else if (owner === 'none') { sql += ' AND owner_id IS NULL'; }
+  else if (owner) { sql += ' AND owner_id = ?'; params.push(owner); }
+
+  if (source) { sql += ' AND source = ?'; params.push(source); }
 
   if (verified === 'yes') { sql += ' AND verified = 1'; }
   else if (verified === 'no') { sql += ' AND verified = 0'; }
@@ -83,7 +126,7 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
     }
   }
 
-  const sortCols = ['name', 'phone', 'created_at', 'dead_at', 'verified', 'phone_valid'];
+  const sortCols = ['name', 'phone', 'created_at', 'dead_at', 'verified', 'phone_valid', 'updated_at', 'lifecycle'];
   const col = sortCols.includes(sortBy) ? sortBy : 'created_at';
   const dir = sortOrder === 'asc' ? 'ASC' : 'DESC';
   sql += ` ORDER BY ${col} ${dir}`;
@@ -108,6 +151,7 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
     ...l,
     verified: !!l.verified,
     phone_valid: !!l.phone_valid,
+    custom: parseCustom(l),
     campaigns: campaignsBy.get(l.id) || [],
     stageHistory: historyBy.get(l.id) || [],
     tags: tagsBy.get(l.id) || [],
@@ -123,6 +167,7 @@ router.get('/:id', requirePermission('leads.view'), (req, res) => {
   if (!lead) return res.status(404).json({ error: 'Not found' });
   lead.verified = !!lead.verified;
   lead.phone_valid = !!lead.phone_valid;
+  lead.custom = parseCustom(lead);
   lead.campaigns = db.prepare(`
     SELECT c.id, c.name FROM campaigns c
     INNER JOIN campaign_leads cl ON cl.campaign_id = c.id WHERE cl.lead_id = ?
@@ -148,6 +193,8 @@ router.post('/', requirePermission('leads.edit'), (req, res) => {
     if (!stage_id) return res.status(400).json({ error: 'Project has no stages' });
   }
   if (id && db.prepare('SELECT 1 FROM leads WHERE id = ?').get(id)) return res.status(409).json({ error: 'Lead id already exists' });
+  const cf = contactFields({ owner_id: req.user.id, source: 'manual', ...req.body }, projectId);
+  if (cf.error) return res.status(400).json({ error: cf.error });
 
   const leadId = id || 'lead_' + Math.random().toString(36).slice(2, 10);
   const now = Date.now();
@@ -159,6 +206,7 @@ router.post('/', requirePermission('leads.edit'), (req, res) => {
   );
 
   db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)').run(leadId, stage_id, now);
+  applySets(db, leadId, { ...cf.sets, updated_at: now });
 
   if (tag_ids && tag_ids.length) {
     const insertTag = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
@@ -170,6 +218,7 @@ router.post('/', requirePermission('leads.edit'), (req, res) => {
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId);
   lead.verified = !!lead.verified;
   lead.phone_valid = !!lead.phone_valid;
+  lead.custom = parseCustom(lead);
   lead.campaigns = [];
   lead.stageHistory = db.prepare('SELECT * FROM stage_history WHERE lead_id = ? ORDER BY at DESC').all(leadId);
   lead.tags = db.prepare('SELECT t.id, t.name, t.color FROM tags t INNER JOIN lead_tags lt ON lt.tag_id = t.id WHERE lt.lead_id = ?').all(leadId);
@@ -184,6 +233,8 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
 
   const { name, phone, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, tag_ids } = req.body;
   if (stage_id && !isOwned('stages', req.project.id, stage_id)) return res.status(400).json({ error: 'Invalid stage' });
+  const cf = contactFields(req.body, req.project.id);
+  if (cf.error) return res.status(400).json({ error: cf.error });
   const phoneValid = phone !== undefined ? (isValidPhone(phone) ? 1 : 0) : existing.phone_valid;
   const stageChanged = stage_id && stage_id !== existing.stage_id;
   const wasDead = existing.status === 'dead';
@@ -198,6 +249,8 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
     status === 'dead' && !wasDead ? now : (status === 'active' && wasDead ? null : existing.dead_at),
     req.params.id
   );
+
+  applySets(db, req.params.id, { ...cf.sets, updated_at: now });
 
   if (stageChanged) {
     db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)').run(req.params.id, stage_id, now);
@@ -214,6 +267,7 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id);
   lead.verified = !!lead.verified;
   lead.phone_valid = !!lead.phone_valid;
+  lead.custom = parseCustom(lead);
   lead.campaigns = db.prepare('SELECT c.id, c.name FROM campaigns c INNER JOIN campaign_leads cl ON cl.campaign_id = c.id WHERE cl.lead_id = ?').all(lead.id);
   lead.stageHistory = db.prepare('SELECT * FROM stage_history WHERE lead_id = ? ORDER BY at DESC').all(lead.id);
   lead.tags = db.prepare('SELECT t.id, t.name, t.color FROM tags t INNER JOIN lead_tags lt ON lt.tag_id = t.id WHERE lt.lead_id = ?').all(lead.id);
@@ -233,13 +287,15 @@ router.delete('/:id', requirePermission('leads.delete'), (req, res) => {
 router.post('/bulk', requirePermission('leads.edit', 'leads.verify', 'leads.delete'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
-  const { ids, action, stageId, tagId } = req.body;
+  const { ids, action, stageId, tagId, value } = req.body;
   if (!ids || !ids.length) return res.status(400).json({ error: 'No IDs' });
   const now = Date.now();
   const needed = action === 'verify' ? 'leads.verify' : action === 'delete' ? 'leads.delete' : 'leads.edit';
   if (!hasPermission(req.user, needed)) return res.status(403).json({ error: 'Permission denied' });
   if (action === 'stage' && !isOwned('stages', projectId, stageId)) return res.status(400).json({ error: 'Invalid stage' });
   if ((action === 'tag' || action === 'untag') && !isOwned('tags', projectId, tagId)) return res.status(400).json({ error: 'Invalid tag' });
+  if (action === 'lifecycle' && !LIFECYCLES.includes(value)) return res.status(400).json({ error: 'Invalid lifecycle' });
+  if (action === 'owner' && value !== null && !isProjectMember(projectId, value)) return res.status(400).json({ error: 'Owner must be a member of this workspace' });
 
   // Only allow acting on leads in this project
   const placeholders = ids.map(() => '?').join(',');
@@ -264,7 +320,14 @@ router.post('/bulk', requirePermission('leads.edit', 'leads.verify', 'leads.dele
     for (const id of ownedIds) del.run(id, tagId);
   } else if (action === 'delete') {
     db.prepare(`DELETE FROM leads WHERE id IN (${ownedPh})`).run(...ownedIds);
+  } else if (action === 'lifecycle') {
+    db.prepare(`UPDATE leads SET lifecycle = ?, updated_at = ? WHERE id IN (${ownedPh})`).run(value, now, ...ownedIds);
+  } else if (action === 'owner') {
+    db.prepare(`UPDATE leads SET owner_id = ?, updated_at = ? WHERE id IN (${ownedPh})`).run(value, now, ...ownedIds);
   } else if (action === 'convert') {
+    // Legacy "Convert to CRM": still creates client rows until the Clients page is replaced (T-023),
+    // and marks the contacts as qualified (never downgrading customers).
+    db.prepare(`UPDATE leads SET lifecycle = 'qualified', updated_at = ? WHERE lifecycle = 'lead' AND id IN (${ownedPh})`).run(now, ...ownedIds);
     const insertClient = db.prepare(`INSERT OR IGNORE INTO clients (id, lead_id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, source, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
     for (const id of ownedIds) {
@@ -275,7 +338,7 @@ router.post('/bulk', requirePermission('leads.edit', 'leads.verify', 'leads.dele
     }
   }
 
-  logAudit('bulk', 'lead', ownedIds.join(','), `${action} (${ownedIds.length} leads)`, { action, stageId, tagId }, projectId);
+  logAudit('bulk', 'lead', ownedIds.join(','), `${action} (${ownedIds.length} leads)`, { action, stageId, tagId, value }, projectId);
   res.json({ ok: true });
 });
 
@@ -311,8 +374,8 @@ router.post('/import/confirm', requirePermission('leads.import'), async (req, re
     fs.copyFileSync(DB_PATH, backupPath);
   } catch {}
 
-  const insertActive = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'active', 0, ?, ?, ?)`);
-  const insertDead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'dead', 0, ?, ?, ?, ?)`);
+  const insertActive = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, project_id, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'active', 0, ?, ?, ?, 'csv')`);
+  const insertDead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'dead', 0, ?, ?, ?, ?, 'csv')`);
   const insertHistory = db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
   const updateByPhone = db.prepare(`UPDATE leads SET name=?, phone_valid=?, email=?, facebook=?, instagram=?, tiktok=?, link=?, location=? WHERE id=?`);
   const findDupe = db.prepare("SELECT id FROM leads WHERE project_id = ? AND LOWER(name) = ? AND phone != '' AND phone = ?");
