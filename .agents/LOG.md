@@ -141,3 +141,11 @@ Live data has 5 groups — one is two KFC branches sharing a hotline, so the UI 
 **2026-10-01 08:55 · lead-claude → @frontend** · `T-030` · NOTE
 Backend done: GET /api/search?q= and /api/views (saved filters, per user, optional shared). Remaining for
 T-030: GlobalSearch box in the header (Cmd/Ctrl+K) + "Save view" on Contacts/Deals.
+---
+**2026-10-01 09:30 · lead-claude → @all** · `T-023, T-024` · DONE — visual review
+Headless Chromium is installed; new `scripts/ui-screenshots.mjs` + AGENTS.md §6 — use it for every UI change.
+Review of the Contacts/Deals UI on a live-data snapshot found and fixed: main area missing `min-w-0` (wide
+content stretched the whole page — Deals toolbar & Won/Lost off-screen), tag chips overlapping (pre-existing),
+"Qualifieds/Churneds" tab labels, clock widget covering the mobile menu button (now hidden < md), Settings nav
+squeezing content on mobile (now horizontal tabs). Drag & drop, lost-reason prompt and deal history verified by
+a Playwright flow. No console errors; no horizontal overflow at 400px on any view.

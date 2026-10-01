@@ -118,7 +118,23 @@ Full protocol: **`.agents/PROTOCOL.md`**. The short version:
 Roles: `backend`, `frontend`, `integrations` (WhatsApp + scraper), `reviewer`, `lead` (planner/orchestrator).
 See `.agents/roles/*.md`.
 
-## 6. Quick manual verification
+## 6. Visual UI check (headless — no GUI needed)
+
+Chromium is installed on the dev box (`/usr/bin/chromium`, with Noto + Arabic fonts). **Any UI change must be
+checked visually before it is marked DONE:**
+
+```bash
+cp server/leaddesk.db /tmp/ui.db   # or better: node -e "new (require('./server/node_modules/better-sqlite3'))('server/leaddesk.db',{readonly:true}).backup('/tmp/ui.db')"
+(cd server && DB_PATH=/tmp/ui.db GMAPS_JOBS_FILE=/tmp/ui-jobs.json WA_AUTH_DIR=/tmp/ui-wa WORKER=off PORT=3104 node index.js &)
+npm run build --prefix client
+node scripts/ui-screenshots.mjs --base http://127.0.0.1:3104 --project <projectId> --out /tmp/shots
+```
+
+It screenshots every view in desktop/dark/mobile (400px) and reports console errors and horizontal overflow.
+Open the PNGs (agents that can read images should look at them). For interactions (drag & drop, modals) write a
+small Playwright script with `executablePath: '/usr/bin/chromium'` — see `scripts/ui-screenshots.mjs`.
+
+## 7. Quick manual verification
 
 ```bash
 # login and keep the cookie

@@ -141,7 +141,7 @@ export default function DealModal({ dealId, pipelines, defaults = {}, close, sho
             <div>
               <label className={label}>Stage</label>
               <select value={effectiveStageId || ''} onChange={e => setStageId(e.target.value)} className={input}>
-                {stages.map(s => <option key={s.id} value={s.id}>{s.name}{s.kind !== 'open' ? ` (${s.kind})` : ` · ${s.probability}%`}</option>)}
+                {stages.map(s => <option key={s.id} value={s.id}>{s.name}{s.kind === 'open' ? ` · ${s.probability}%` : ''}</option>)}
               </select>
             </div>
             {stage?.kind === 'lost' && (

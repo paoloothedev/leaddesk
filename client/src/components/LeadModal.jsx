@@ -204,7 +204,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
                 className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Stage</label>
+              <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Outreach stage</label>
               <select value={stage} onChange={e => setStage(e.target.value)}
                 className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
                 {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -307,7 +307,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
             <button onClick={close} className="inline-flex items-center px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">Cancel</button>
             <button onClick={handleSave} className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
               <CheckCircle size={14} weight="bold" />
-              {leadId ? 'Save changes' : 'Create lead'}
+              {leadId ? 'Save changes' : 'Create contact'}
             </button>
           </div>
         </div>

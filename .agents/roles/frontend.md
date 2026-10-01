@@ -16,6 +16,7 @@
 
 **Before you finish**
 - [ ] `npm run build --prefix client` succeeds with no new warnings.
-- [ ] Checked the screen in light and dark mode and at mobile width (sidebar collapses).
+- [ ] Ran `scripts/ui-screenshots.mjs` (AGENTS.md §6) and looked at light, dark and 400px-mobile shots; no
+      console errors, no horizontal page overflow. Tested interactions with a Playwright script if you added any.
 - [ ] Switching projects reloads the data you show (no stale data from the previous project).
 - [ ] Needed a new/changed endpoint? It's in `api.js` and agreed with backend (`CONTRACT`).

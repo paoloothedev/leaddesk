@@ -187,15 +187,15 @@ export default function Settings({ user, ...props }) {
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Configure your workspace, integrations, and accounts.</p>
       </div>
 
-      <div className="flex gap-6 items-start">
-        <nav className="w-48 shrink-0 sticky top-4">
-          <div className="space-y-0.5">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch md:items-start">
+        <nav className="w-full md:w-48 shrink-0 md:sticky md:top-4">
+          <div className="flex md:block gap-1 md:space-y-0.5 overflow-x-auto pb-1 md:pb-0">
             {tabs.map(item => {
               const Icon = item.icon
               const isActive = activeTab === item.id
               return (
                 <button key={item.id} onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium transition-colors ${
+                  className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium transition-colors ${
                     isActive
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                       : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50'

@@ -28,7 +28,7 @@ export default function ClockWidget({ timezone }) {
   })
 
   return (
-    <div className="fixed top-0 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-4 py-1.5 rounded-b-xl bg-zinc-900/90 backdrop-blur-md border border-zinc-800 border-t-0 shadow-lg">
+    <div className="fixed top-0 left-1/2 -translate-x-1/2 z-[60] hidden md:flex items-center gap-3 px-4 py-1.5 rounded-b-xl bg-zinc-900/90 backdrop-blur-md border border-zinc-800 border-t-0 shadow-lg">
       <div className="flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
         <span className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">{tz.replace('_', ' ')}</span>

@@ -301,7 +301,7 @@ export default function DeadList({ stages, tags, campaigns, refreshId, openLeadM
                       {l.tags?.length ? (
                         <div className="flex gap-0.5 flex-wrap max-w-[100px]">
                           {l.tags.map(t => (
-                            <span key={t.id} className="inline-flex items-center px-1 h-4 rounded text-[9px] font-medium text-white" style={{ background: t.color }}>{t.name}</span>
+                            <span key={t.id} className="inline-flex items-center px-1 h-4 rounded text-[9px] font-medium text-white whitespace-nowrap" style={{ background: t.color }}>{t.name}</span>
                           ))}
                         </div>
                       ) : <span className="text-zinc-300 dark:text-zinc-600">&mdash;</span>}

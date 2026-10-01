@@ -168,7 +168,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
       </div>
 
       <div className="flex flex-wrap items-center gap-1 mb-3 border-b border-zinc-200 dark:border-zinc-800">
-        {[['', 'All'], ...Object.entries(LIFECYCLE).map(([k, v]) => [k, v.label + 's'])].map(([k, l]) => (
+        {[['', 'All'], ...Object.entries(LIFECYCLE).map(([k, v]) => [k, v.plural])].map(([k, l]) => (
           <button key={k} onClick={() => setFLifecycle(k)}
             className={`px-3 h-9 -mb-px text-xs font-medium border-b-2 transition-colors ${fLifecycle === k ? 'border-emerald-500 text-zinc-900 dark:text-zinc-100' : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}>
             {l}
@@ -423,9 +423,9 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                     </td>
                     <td className="py-3 px-4">
                       {l.tags?.length ? (
-                        <div className="flex gap-0.5 flex-wrap max-w-[100px]">
+                        <div className="flex gap-0.5 flex-wrap max-w-[180px]">
                           {l.tags.map(t => (
-                            <span key={t.id} className="inline-flex items-center px-1 h-4 rounded text-[9px] font-medium text-white" style={{ background: t.color }}>{t.name}</span>
+                            <span key={t.id} className="inline-flex items-center px-1 h-4 rounded text-[9px] font-medium text-white whitespace-nowrap" style={{ background: t.color }}>{t.name}</span>
                           ))}
                         </div>
                       ) : <span className="text-zinc-300 dark:text-zinc-600">&mdash;</span>}

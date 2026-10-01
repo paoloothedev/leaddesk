@@ -4,7 +4,7 @@ import { List } from '@phosphor-icons/react'
 export default function Layout({ children, sidebarCollapsed, openMobileMenu }) {
   return (
     <div className="flex min-h-[100dvh] bg-zinc-50 dark:bg-zinc-950">
-        <main className={`flex-1 transition-all duration-300 p-4 md:p-6 lg:p-8 pt-12 ${
+        <main className={`flex-1 min-w-0 transition-all duration-300 p-4 md:p-6 lg:p-8 pt-12 ${
           sidebarCollapsed ? 'md:ml-16' : 'md:ml-60'
         }`}>
         <button

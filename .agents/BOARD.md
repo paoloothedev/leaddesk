@@ -49,30 +49,6 @@ _(none)_
 
 ## REVIEW
 
-### T-023 · Contacts UI: Leads → Contacts with lifecycle; Clients = customers view
-- Status: REVIEW
-- Owner: lead-claude
-- Role: frontend
-- Priority: P0
-- Files: client/src/App.jsx, client/src/api.js, client/src/components/Sidebar.jsx, LeadsTable.jsx, LeadModal.jsx, ClientsList.jsx
-- Depends on: T-020
-- Updated: 2026-10-01 01:32
-- Notes: Lifecycle filter chips + column; convert-to-client becomes 'mark as customer'.
-  → Contacts page (lifecycle tabs + column, company column, owner filter, bulk lifecycle/owner), contact modal (lifecycle/owner/company), sidebar Contacts + Deals (Clients removed), dashboard/picker counts from contacts + new deal metrics. Build OK, 48 tests; NOT visually checked.
-
-### T-024 · Deals UI: kanban board + pipeline settings
-- Status: REVIEW
-- Owner: lead-claude
-- Role: frontend
-- Priority: P0
-- Files: client/src/components/DealsBoard.jsx (new), DealModal.jsx (new), PipelineSettings.jsx (new), client/src/api.js, App.jsx, Sidebar.jsx, Settings.jsx
-- Depends on: T-022
-- Updated: 2026-10-01 01:29
-- Notes: Drag & drop between stages (no new dependency unless @lead agrees), column totals (count + value), won/lost actions with lost reason.
-  → DealsBoard.jsx (kanban, native DnD, totals, lost-reason prompt, idle badges, owner filter), DealModal.jsx, RecordPicker.jsx, PipelineSettings.jsx (Settings → Pipelines), format.js, api.js; GET /projects/:id/members for owner pickers. Build OK; NOT visually checked — needs a browser pass (light/dark, mobile, drag & drop).
-
-_(none)_
-
 ## TODO
 
 <!-- Phase 1 — core CRM. Spec: .agents/handoffs/PHASE-1-DESIGN.md. Phase 0 is complete. -->
@@ -116,6 +92,32 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-024 · Deals UI: kanban board + pipeline settings
+- Status: DONE
+- Owner: lead-claude
+- Role: frontend
+- Priority: P0
+- Files: client/src/components/DealsBoard.jsx (new), DealModal.jsx (new), PipelineSettings.jsx (new), client/src/api.js, App.jsx, Sidebar.jsx, Settings.jsx
+- Depends on: T-022
+- Updated: 2026-10-01 02:08
+- Notes: Drag & drop between stages (no new dependency unless @lead agrees), column totals (count + value), won/lost actions with lost reason.
+  → DealsBoard.jsx (kanban, native DnD, totals, lost-reason prompt, idle badges, owner filter), DealModal.jsx, RecordPicker.jsx, PipelineSettings.jsx (Settings → Pipelines), format.js, api.js; GET /projects/:id/members for owner pickers. Build OK; NOT visually checked — needs a browser pass (light/dark, mobile, drag & drop).
+
+_(none)_
+  → Visually + interactively verified: create deal via modal with contact search, drag to Proposal, drag to Lost → reason prompt → status lost, history in modal. Fixed during review: page-wide overflow (Layout min-w-0) hid toolbar and Won/Lost columns.
+
+### T-023 · Contacts UI: Leads → Contacts with lifecycle; Clients = customers view
+- Status: DONE
+- Owner: lead-claude
+- Role: frontend
+- Priority: P0
+- Files: client/src/App.jsx, client/src/api.js, client/src/components/Sidebar.jsx, LeadsTable.jsx, LeadModal.jsx, ClientsList.jsx
+- Depends on: T-020
+- Updated: 2026-10-01 02:08
+- Notes: Lifecycle filter chips + column; convert-to-client becomes 'mark as customer'.
+  → Contacts page (lifecycle tabs + column, company column, owner filter, bulk lifecycle/owner), contact modal (lifecycle/owner/company), sidebar Contacts + Deals (Clients removed), dashboard/picker counts from contacts + new deal metrics. Build OK, 48 tests; NOT visually checked.
+  → Visually verified in headless Chromium on live-data snapshot (desktop/dark/mobile): lifecycle tabs, columns, modal. Fixed during review: tab plurals, overlapping tag chips (also Dead list), 'Create contact' wording.
 
 ### T-033 · Include companies, deals, pipelines, contacts fields in backup export/restore
 - Status: DONE
