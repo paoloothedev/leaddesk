@@ -137,3 +137,7 @@ and a "Copy setup from…" select in the create-workspace modal.
 Backend done: GET /api/contacts/duplicates, POST /api/contacts/merge (moves tags, campaigns, deals, history).
 Live data has 5 groups — one is two KFC branches sharing a hotline, so the UI must be a **manual review**
 (pick primary, tick which to merge), never auto-merge. Remaining for T-031: MergeContacts UI.
+---
+**2026-10-01 08:55 · lead-claude → @frontend** · `T-030` · NOTE
+Backend done: GET /api/search?q= and /api/views (saved filters, per user, optional shared). Remaining for
+T-030: GlobalSearch box in the header (Cmd/Ctrl+K) + "Save view" on Contacts/Deals.

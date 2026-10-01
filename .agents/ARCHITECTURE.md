@@ -102,6 +102,8 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/pipelines` | routes/pipelines.js | GET / (all pipelines + stages with deal_count/deal_value; any member), POST / {name, stages?}, PUT /:id, DELETE /:id (not last, no deals), POST /:id/stages, PUT /stages/:stageId, DELETE /stages/:stageId?moveTo=, POST /:id/stages/reorder — writes need `settings.edit` |
 | `/deals` | routes/deals.js | GET / (page/limit; pipeline, stage, status, owner, contact, company, search), GET /board?pipeline= (columns with deals + count/total_value/weighted_value), GET /:id (+history), POST, PUT /:id (stage_id change = move), POST /:id/move {stage_id, lost_reason}, DELETE /:id — `deals.*` perms. Moving to a `won` stage makes the contact a `customer`. Items include contact, company, stage, `rotting` |
 | `/custom-fields` | routes/customFields.js | GET / (all entities) or ?entity= (any member), POST {entity,label,type,options,required,key?}, PUT /:id (label/options/required/sort_order), DELETE /:id (also strips stored values) — writes need `settings.edit`. Entity lists accept `?cf.<key>=value` (`__empty` = no value) |
+| `/search` | routes/search.js | GET ?q= (≥2 chars) → `{contacts, companies, deals}` (per-permission; phone digits match) |
+| `/views` | routes/search.js | GET ?entity=, POST {entity, name, filters, shared}, DELETE /:id (creator only) — saved list filters (migration 010; not in backups) |
 | `/stages` | routes/stages.js | CRUD (GET includes `lead_count`) + POST /reorder |
 | `/tags` | routes/tags.js | CRUD (GET includes lead_count) |
 | `/templates` | routes/templates.js | CRUD |

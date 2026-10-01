@@ -10,6 +10,17 @@ by running the code.
 
 ## IN PROGRESS
 
+### T-030 · Global search (FTS5) + saved views
+- Status: IN PROGRESS
+- Owner: lead-claude
+- Role: backend
+- Priority: P2
+- Files: server/migrations/0xx-search.js, server/routes/search.js, client/src/components/GlobalSearch.jsx
+- Depends on: T-020, T-021, T-022
+- Updated: 2026-10-01 01:45
+- Notes: Search contacts, companies, deals in one box; saved filter sets per user.
+  → Backend first: GET /api/search + /api/views; UI later.
+
 ### T-031 · Duplicate detection & merge for contacts
 - Status: IN PROGRESS
 - Owner: lead-claude
@@ -93,16 +104,6 @@ _(none)_
 - Depends on: T-023, T-024, T-021
 - Updated: 2026-10-01 01:15
 - Notes: Details panel + related records; leave a slot for the Phase 2 timeline.
-
-### T-030 · Global search (FTS5) + saved views
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P2
-- Files: server/migrations/0xx-search.js, server/routes/search.js, client/src/components/GlobalSearch.jsx
-- Depends on: T-020, T-021, T-022
-- Updated: 2026-10-01 01:15
-- Notes: Search contacts, companies, deals in one box; saved filter sets per user.
 
 ### T-034 · Retire legacy clients (table, /api/clients, ClientsList/ClientModal)
 - Status: TODO
