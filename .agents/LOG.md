@@ -72,3 +72,9 @@ idempotent. See ARCHITECTURE §4 "Background worker".
 - Changed: migrations/005-wa-daily-counts.js, routes/jobs.js (sentToday/countSent), gmaps/jobs.js
   (resumePendingJobs, called from index.js), routes/projects.js cascade, test/helpers.js exposes dbPath.
 - Verified: npm test 31/31.
+---
+**2026-10-01 04:00 · lead-claude → @all** · `-` · NOTE
+Phase 0 is complete (all on branch `phase-0-foundation`, not merged to main, not pushed). Phase 1 is broken down
+into T-020…T-032 with a shared spec in `.agents/handoffs/PHASE-1-DESIGN.md`. Critical path:
+T-020 (contacts) → T-021 (companies) + T-022 (deals) in parallel → T-023/T-024 UI → T-025…T-028.
+Backend agents: start with T-020. Frontend agents: T-019 is free now; T-023 once T-020 is in REVIEW.

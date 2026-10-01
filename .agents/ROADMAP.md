@@ -33,7 +33,7 @@ can run in parallel. Each epic is broken into board tasks (`.agents/BOARD.md`) w
 
 ---
 
-## Phase 0 — Foundation (must come first)
+## Phase 0 — Foundation ✅ done 2026-10-01 (branch `phase-0-foundation`; T-001…T-017)
 
 Everything later depends on this. No new features until done.
 
@@ -52,7 +52,7 @@ Everything later depends on this. No new features until done.
 - **E0.7 Project membership**: `project_members(project_id, account_id, role)`; `resolveProject` checks
   membership; admins see all.
 
-## Phase 1 — Core CRM data model
+## Phase 1 — Core CRM data model ← **current phase** (tasks T-020…T-032, spec `handoffs/PHASE-1-DESIGN.md`)
 
 - **E1.1 Contacts (merge leads + clients)**: one `contacts` table with `lifecycle_stage`
   (`lead → qualified → customer → churned`, plus `dead`). Migrate `leads` and `clients` into it, keep ids.

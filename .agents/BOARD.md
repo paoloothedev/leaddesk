@@ -20,6 +20,145 @@ _(none)_
 
 ## TODO
 
+<!-- Phase 1 — core CRM. Spec: .agents/handoffs/PHASE-1-DESIGN.md. Phase 0 is complete. -->
+
+### T-019 · Hide row-level actions the user lacks permission for
+- Status: TODO
+- Owner: —
+- Role: frontend
+- Priority: P2
+- Files: client/src/components/LeadsTable.jsx, DeadList.jsx, Campaigns.jsx, ClientsList.jsx, BroadcastJobs.jsx
+- Updated: 2026-10-01 01:15
+- Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
+
+### T-020 · Contacts: merge clients into leads (migration 006) + /api/contacts
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P0
+- Files: server/migrations/006-contacts.js, server/routes/contacts.js (new), server/routes/clients.js (shim), server/index.js, server/lib/scope.js, server/test/contacts.test.js
+- Updated: 2026-10-01 01:15
+- Notes: Spec: handoffs/PHASE-1-DESIGN.md § Contacts. Test the migration on a copy of the live DB (40 clients in Default) and on the legacy DB.
+
+### T-021 · Companies backend (migration 007, /api/companies)
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P0
+- Files: server/migrations/007-companies.js, server/routes/companies.js (new), server/index.js, server/lib/scope.js, server/routes/projects.js, server/test/companies.test.js
+- Depends on: T-020
+- Updated: 2026-10-01 01:15
+- Notes: Spec: PHASE-1-DESIGN § Companies. Include contacts count + linking/unlinking contacts.
+
+### T-022 · Pipelines & deals backend (migration 008)
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P0
+- Files: server/migrations/008-deals.js, server/routes/pipelines.js, server/routes/deals.js (new), server/index.js, server/routes/auth.js (deals.* perms), server/lib/scope.js, server/routes/projects.js, server/test/deals.test.js
+- Depends on: T-020
+- Updated: 2026-10-01 01:15
+- Notes: Spec: PHASE-1-DESIGN § Pipelines & deals. Default pipeline seeded for every workspace (existing + new). Endpoint for moving a deal between stages (records history).
+
+### T-023 · Contacts UI: Leads → Contacts with lifecycle; Clients = customers view
+- Status: TODO
+- Owner: —
+- Role: frontend
+- Priority: P0
+- Files: client/src/App.jsx, client/src/api.js, client/src/components/Sidebar.jsx, LeadsTable.jsx, LeadModal.jsx, ClientsList.jsx
+- Depends on: T-020
+- Updated: 2026-10-01 01:15
+- Notes: Lifecycle filter chips + column; convert-to-client becomes 'mark as customer'.
+
+### T-024 · Deals UI: kanban board + pipeline settings
+- Status: TODO
+- Owner: —
+- Role: frontend
+- Priority: P0
+- Files: client/src/components/DealsBoard.jsx (new), DealModal.jsx (new), PipelineSettings.jsx (new), client/src/api.js, App.jsx, Sidebar.jsx, Settings.jsx
+- Depends on: T-022
+- Updated: 2026-10-01 01:15
+- Notes: Drag & drop between stages (no new dependency unless @lead agrees), column totals (count + value), won/lost actions with lost reason.
+
+### T-025 · Custom fields backend (migration 009)
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P1
+- Files: server/migrations/009-custom-fields.js, server/routes/customFields.js (new), server/lib/customFields.js (validation), routes/contacts.js, companies.js, deals.js
+- Depends on: T-020, T-021, T-022
+- Updated: 2026-10-01 01:15
+- Notes: Spec: PHASE-1-DESIGN § Custom fields. Validation helper used by all three entity routes.
+
+### T-026 · Record owners: owner filters, default owner, bulk assign
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P1
+- Files: server/routes/contacts.js, companies.js, deals.js, server/test/owners.test.js
+- Depends on: T-020, T-021, T-022
+- Updated: 2026-10-01 01:15
+- Notes: owner=me|<id>|none filter; owner must be workspace member.
+
+### T-027 · Custom fields UI (settings + forms + table columns)
+- Status: TODO
+- Owner: —
+- Role: frontend
+- Priority: P1
+- Files: client/src/components/CustomFieldsSettings.jsx (new), CustomFieldInputs.jsx (new), LeadModal.jsx, DealModal.jsx, Settings.jsx, client/src/api.js
+- Depends on: T-025, T-023, T-024
+- Updated: 2026-10-01 01:15
+
+### T-028 · Record pages: full-page contact / company / deal views
+- Status: TODO
+- Owner: —
+- Role: frontend
+- Priority: P1
+- Files: client/src/components/ContactPage.jsx, CompanyPage.jsx, DealPage.jsx (new), App.jsx routes
+- Depends on: T-023, T-024, T-021
+- Updated: 2026-10-01 01:15
+- Notes: Details panel + related records; leave a slot for the Phase 2 timeline.
+
+### T-029 · Workspace UX: rename Project→Workspace in UI; workspace templates (clone setup)
+- Status: TODO
+- Owner: —
+- Role: frontend
+- Priority: P1
+- Files: client/src/components/ProjectPicker.jsx, Sidebar.jsx, server/routes/projects.js (POST /projects/:id/clone-setup)
+- Depends on: T-022, T-025
+- Updated: 2026-10-01 01:15
+- Notes: Clone = stages, tags, templates, pipelines, custom fields, settings (no contacts). Agency onboarding feature (ROADMAP D3).
+
+### T-030 · Global search (FTS5) + saved views
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P2
+- Files: server/migrations/0xx-search.js, server/routes/search.js, client/src/components/GlobalSearch.jsx
+- Depends on: T-020, T-021, T-022
+- Updated: 2026-10-01 01:15
+- Notes: Search contacts, companies, deals in one box; saved filter sets per user.
+
+### T-031 · Duplicate detection & merge for contacts
+- Status: TODO
+- Owner: —
+- Role: backend
+- Priority: P2
+- Files: server/routes/contacts.js (merge endpoint), server/lib/merge.js, client/src/components/MergeContacts.jsx
+- Depends on: T-020
+- Updated: 2026-10-01 01:15
+- Notes: Match by phone/email; merge keeps history, tags, campaigns, deals.
+
+### T-032 · Google Maps import creates companies + contacts
+- Status: TODO
+- Owner: —
+- Role: integrations
+- Priority: P1
+- Files: server/routes/gmaps.js
+- Depends on: T-021
+- Updated: 2026-10-01 01:15
+- Notes: Dedupe company by name+phone within workspace; source='gmaps'.
+
 ## DONE
 
 ### T-006 · Hide UI actions the user lacks permission for
