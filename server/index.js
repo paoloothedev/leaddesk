@@ -17,6 +17,7 @@ import emailCampaignsRouter from './routes/emailCampaigns.js';
 import gmapsRouter from './routes/gmaps.js';
 import projectsRouter from './routes/projects.js';
 import { resolveProject } from './middleware/project.js';
+import { adoptLegacyJobs } from './gmaps/jobs.js';
 import { initClient, getStatus, onStatusChange, destroyClient, destroyAllClients, logoutClient, migrateLegacyAuth } from './whatsapp.js';
 
 import os from 'os';
@@ -367,7 +368,10 @@ server.listen(PORT, HOST, () => {
   try {
     const db = getDB();
     const def = db.prepare('SELECT id FROM projects ORDER BY created_at ASC LIMIT 1').get();
-    if (def) migrateLegacyAuth(def.id);
+    if (def) {
+      migrateLegacyAuth(def.id);
+      adoptLegacyJobs(def.id);
+    }
   } catch {}
 
   // Resume any pending broadcast jobs (per project, lazily)

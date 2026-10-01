@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getDB, logAudit, createProject, seedStagesForProject } from '../db.js';
 import { authMiddleware, requirePermission } from './auth.js';
-import crypto from 'crypto';
+import { removeProjectAuth } from '../whatsapp.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -89,15 +89,7 @@ router.delete('/:id', requirePermission('settings.edit'), (req, res) => {
     return res.status(500).json({ error: 'Failed to delete project: ' + err.message });
   }
 
-  // Clean up WhatsApp auth dir (fire and forget)
-  import('fs').then(fs => {
-    import('path').then(path => {
-      import('url').then(url => {
-        const dir = path.join(path.dirname(url.fileURLToPath(import.meta.url)), '..', 'baileys_auth', id);
-        try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
-      });
-    });
-  }).catch(() => {});
+  removeProjectAuth(id).catch(() => {});
 
   logAudit('delete', 'project', id, project.name, { by: req.user.id }, null);
   res.json({ ok: true });

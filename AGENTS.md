@@ -62,8 +62,14 @@ docker compose up -d --build
 ```
 
 Default login: `admin` / `admin` (seeded when `accounts` is empty).
-There is **no test suite and no linter**. Verify by: `node --check <file>` for server files,
-`npm run build --prefix client` for the frontend, and hitting the API / UI (see §6).
+Tests: `npm test --prefix server` (Node's built-in `node --test`, no extra deps). Each test file boots a real
+server on a random port with a throwaway DB/jobs file/WA dir via `server/test/helpers.js` — **every new endpoint
+needs tests, including a cross-workspace isolation test in `test/isolation.test.js`.** No linter; also run
+`node --check <file>` and `npm run build --prefix client` for frontend changes.
+
+Env overrides (used by tests, handy for local experiments): `DB_PATH`, `GMAPS_JOBS_FILE`, `WA_AUTH_DIR`, `PORT`, `HOST`.
+⚠ Port 3001 on the dev box is used by an unrelated app — run LeadDesk on another port (e.g. `PORT=3101`).
+Native modules (`better-sqlite3`, `bcrypt`) must be built for the OS you run on (dev box is Alpine/musl).
 
 ## 4. Hard rules (all agents)
 
@@ -71,6 +77,9 @@ There is **no test suite and no linter**. Verify by: `node --check <file>` for s
    (`leads, campaigns, stages, tags, message_templates, broadcast_jobs, clients, email_campaigns, import_logs, audit_log, settings`)
    must filter by `req.project.id`, and every INSERT must set `project_id`.
    Lookups by id must be `WHERE id = ? AND project_id = ?` — otherwise one project can read/modify another's data.
+   **Any id arriving in a request body/params** (stage_id, tag_ids, leadIds, …) must be checked with
+   `ownedIds()` / `isOwned()` from `server/lib/scope.js`. LeadDesk is used in **agency mode** (one install,
+   many client businesses) so a leak between workspaces is a P0 bug.
 2. **New project-scoped routers** are mounted in `server/index.js` as `app.use('/api/x', resolveProject, xRouter)`
    (after the global `authMiddleware`). New scoped tables must be added to `SCOPED_TABLES` in `db.js` **and** to
    the cascade delete in `routes/projects.js`.

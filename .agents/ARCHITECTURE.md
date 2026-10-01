@@ -24,6 +24,8 @@ api.js request()                                  cookie parser (inline, sets re
 - **requirePermission(...perms)**: admin role bypasses; otherwise user needs *any* of the listed perms.
   Permission list: `ALL_PERMISSIONS` in `routes/auth.js`. ⚠ Only some routers use it (clients, emailCampaigns,
   projects, accounts). leads/campaigns/jobs/tags/stages/templates/settings do not check permissions.
+- **Ownership helpers** (`lib/scope.js`): `ownedIds(table, projectId, ids)` filters foreign ids out,
+  `isOwned(table, projectId, id)` for single ids. Covered by `test/isolation.test.js`.
 - **resolveProject** (`middleware/project.js`): project id from `X-Project-Id` header or `?project=` →
   `req.project` (full row). 400 if missing, 404 if unknown. It does **not** check the user has access to
   that project — all logged-in users see all projects.
@@ -120,8 +122,9 @@ Client → server: `join_project(projectId)`, `leave_project`, `wa_init {project
 - Waits (polls every 10 s) until the project's WA client is ready.
 
 ### Google Maps scraper (`server/gmaps/`)
-- `jobs.js`: jobs live in memory + `jobs_data.json` (not in SQLite). Each job has `projectId`; legacy jobs with
-  no projectId are visible to every project. A running job restarted after crash becomes `pending` but is **not
+- `jobs.js`: jobs live in memory + `jobs_data.json` (not in SQLite; path overridable with `GMAPS_JOBS_FILE`).
+  Each job has `projectId` and is only visible to that project; legacy jobs without one are assigned to the
+  oldest project at startup (`adoptLegacyJobs`). A running job restarted after crash becomes `pending` but is **not
   re-run** automatically.
 - `scraper.js`: Playwright Chromium, rejects cookie consent, extracts `APP_INITIALIZATION_STATE`, scrolls
   `depth` times. Options: depth, lang, geo, zoom.

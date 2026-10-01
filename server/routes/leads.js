@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDB, logAudit, DB_PATH } from '../db.js';
+import { ownedIds, isOwned } from '../lib/scope.js';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
@@ -134,7 +135,15 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
-  const { id, name, phone, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, tag_ids } = req.body;
+  const { id, name, phone, email, facebook, instagram, tiktok, link, location, notes, status, verified, tag_ids } = req.body;
+  let { stage_id } = req.body;
+  if (stage_id) {
+    if (!isOwned('stages', projectId, stage_id)) return res.status(400).json({ error: 'Invalid stage' });
+  } else {
+    stage_id = db.prepare('SELECT id FROM stages WHERE project_id = ? ORDER BY sort_order LIMIT 1').get(projectId)?.id;
+    if (!stage_id) return res.status(400).json({ error: 'Project has no stages' });
+  }
+  if (id && db.prepare('SELECT 1 FROM leads WHERE id = ?').get(id)) return res.status(409).json({ error: 'Lead id already exists' });
 
   const leadId = id || 'lead_' + Math.random().toString(36).slice(2, 10);
   const now = Date.now();
@@ -149,7 +158,7 @@ router.post('/', (req, res) => {
 
   if (tag_ids && tag_ids.length) {
     const insertTag = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
-    for (const tid of tag_ids) insertTag.run(leadId, tid);
+    for (const tid of ownedIds('tags', projectId, tag_ids)) insertTag.run(leadId, tid);
   }
 
   logAudit('create', 'lead', leadId, name || '(unnamed)', { phone, phoneValid, stage_id }, projectId);
@@ -170,6 +179,7 @@ router.put('/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
 
   const { name, phone, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, tag_ids } = req.body;
+  if (stage_id && !isOwned('stages', req.project.id, stage_id)) return res.status(400).json({ error: 'Invalid stage' });
   const phoneValid = phone !== undefined ? (isValidPhone(phone) ? 1 : 0) : existing.phone_valid;
   const stageChanged = stage_id && stage_id !== existing.stage_id;
   const wasDead = existing.status === 'dead';
@@ -192,7 +202,7 @@ router.put('/:id', (req, res) => {
   if (tag_ids !== undefined) {
     db.prepare('DELETE FROM lead_tags WHERE lead_id = ?').run(req.params.id);
     const insertTag = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
-    for (const tid of tag_ids) insertTag.run(req.params.id, tid);
+    for (const tid of ownedIds('tags', req.project.id, tag_ids)) insertTag.run(req.params.id, tid);
   }
 
   logAudit('edit', 'lead', req.params.id, existing.name, { changes: req.body }, req.project.id);
@@ -222,6 +232,8 @@ router.post('/bulk', (req, res) => {
   const { ids, action, stageId, tagId } = req.body;
   if (!ids || !ids.length) return res.status(400).json({ error: 'No IDs' });
   const now = Date.now();
+  if (action === 'stage' && !isOwned('stages', projectId, stageId)) return res.status(400).json({ error: 'Invalid stage' });
+  if ((action === 'tag' || action === 'untag') && !isOwned('tags', projectId, tagId)) return res.status(400).json({ error: 'Invalid tag' });
 
   // Only allow acting on leads in this project
   const placeholders = ids.map(() => '?').join(',');

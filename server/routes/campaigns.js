@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDB, logAudit } from '../db.js';
+import { ownedIds, isOwned } from '../lib/scope.js';
 
 const router = Router();
 
@@ -69,7 +70,7 @@ router.post('/:id/leads', (req, res) => {
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ? AND project_id = ?').get(req.params.id, projectId);
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
 
-  let ids = leadIds;
+  let ids = leadIds ? ownedIds('leads', projectId, leadIds) : null;
 
   if (!ids && count) {
     if (force) {
@@ -124,6 +125,7 @@ router.get('/:id/eligible', (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { force } = req.query;
+  if (!isOwned('campaigns', projectId, req.params.id)) return res.status(404).json({ error: 'Campaign not found' });
 
   const normal = db.prepare(`
     SELECT id, name, phone FROM leads

@@ -10,8 +10,6 @@ by running the code.
 
 ## IN PROGRESS
 
-_(none)_
-
 ## BLOCKED
 
 _(none)_
@@ -21,26 +19,6 @@ _(none)_
 _(none)_
 
 ## TODO
-
-### T-001 · Commit the in-progress multi-project refactor
-- Status: TODO
-- Owner: —
-- Role: lead
-- Priority: P0
-- Files: (whole working tree — 28 modified files + ProjectPicker.jsx, middleware/, routes/projects.js)
-- Updated: 2026-10-01
-- Notes: Needs @human approval. Everything since "Initial commit" is uncommitted. Do NOT add `server/*.db*`,
-  `server/growengine.db*`, `server/baileys_auth/`, `test.csv`. Smoke test (login → picker → project → leads) first.
-
-### T-004 · Enforce project ownership on ids passed in bodies
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P1
-- Files: server/routes/leads.js, server/routes/campaigns.js, server/routes/jobs.js, server/routes/clients.js
-- Updated: 2026-10-01
-- Notes: e.g. `/leads/bulk` action `stage`/`tag` doesn't check `stageId`/`tagId` belong to `req.project`;
-  `/jobs` POST trusts `leads[]` ids/phones; audit all routes for `WHERE id = ?` without `AND project_id = ?` (verify).
 
 ### T-005 · Apply requirePermission to all project routers
 - Status: TODO
@@ -100,26 +78,6 @@ _(none)_
 - Updated: 2026-10-01
 - Notes: `loadJobs()` flips running→pending but nothing calls `runJob()` again.
 
-### T-011 · Ignore stray local data files in git
-- Status: TODO
-- Owner: —
-- Role: lead
-- Priority: P1
-- Files: .gitignore, server/data.db (tracked, empty)
-- Updated: 2026-10-01
-- Notes: add `server/*.db`, `server/*.db-*`, `server/*.db.*backup*`, `test.csv`; `git rm --cached server/data.db`
-  and the committed `.wwebjs_cache` files. Ask @human before removing tracked files.
-
-### T-012 · Add a minimal test harness
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P2
-- Files: server/package.json, server/test/** (new)
-- Updated: 2026-10-01
-- Notes: `node --test` + supertest against a temp DB (add a `DB_PATH` env override in db.js as part of this task). Start with
-  auth, project scoping, leads CRUD.
-
 ### T-013 · Versioned migrations system (E0.3)
 - Status: TODO
 - Owner: —
@@ -171,16 +129,64 @@ _(none)_
 - Notes: `project_members(project_id, account_id, role)`; creator auto-added; admins see all; GET /projects
   lists only member projects. Frontend members UI = separate task.
 
+## DONE
+
+### T-012 · Add a minimal test harness
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P2
+- Files: server/package.json, server/test/** (new)
+- Updated: 2026-10-01 01:02
+- Notes: `node --test` + supertest against a temp DB (add a `DB_PATH` env override in db.js as part of this task). Start with
+  auth, project scoping, leads CRUD.
+
+_(none)_
+  → server/test/ with helpers.js (spawns server on temp DB/jobs/WA dir), auth + isolation tests; npm test --prefix server.
+
+### T-004 · Enforce project ownership on ids passed in bodies
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P1
+- Files: server/routes/leads.js, server/routes/campaigns.js, server/routes/jobs.js, server/routes/clients.js
+- Updated: 2026-10-01 01:02
+- Notes: e.g. `/leads/bulk` action `stage`/`tag` doesn't check `stageId`/`tagId` belong to `req.project`;
+  `/jobs` POST trusts `leads[]` ids/phones; audit all routes for `WHERE id = ?` without `AND project_id = ?` (verify).
+  → Confirmed leaks: campaigns/:id/leads accepts+returns foreign leads; bulk tag/stage accept foreign tag/stage; GET campaigns/:id/eligible works cross-workspace.
+  → Fixed via server/lib/scope.js in leads, campaigns, clients, emailCampaigns, jobs, gmaps jobs. Covered by test/isolation.test.js (4 tests fail without fix).
+
 ### T-018 · Get @human answers on roadmap decisions D1–D6
-- Status: TODO
-- Owner: —
+- Status: DONE
+- Owner: lead-claude
 - Role: lead
 - Priority: P0
 - Files: .agents/ROADMAP.md
-- Updated: 2026-10-01
+- Updated: 2026-10-01 00:59
 - Notes: blocks Phase 1 breakdown. Record answers in ROADMAP.md "Open decisions".
+  → All recommendations accepted; D3 = agency mode. See ROADMAP Decisions.
 
-## DONE
+### T-011 · Ignore stray local data files in git
+- Status: DONE
+- Owner: lead-claude
+- Role: lead
+- Priority: P1
+- Files: .gitignore, server/data.db (tracked, empty)
+- Updated: 2026-10-01 00:59
+- Notes: add `server/*.db`, `server/*.db-*`, `server/*.db.*backup*`, `test.csv`; `git rm --cached server/data.db`
+  and the committed `.wwebjs_cache` files. Ask @human before removing tracked files.
+  → Done in bc73b88 (gitignore + untracked data.db, .wwebjs_cache, dist).
+
+### T-001 · Commit the in-progress multi-project refactor
+- Status: DONE
+- Owner: lead-claude
+- Role: lead
+- Priority: P0
+- Files: (whole working tree — 28 modified files + ProjectPicker.jsx, middleware/, routes/projects.js)
+- Updated: 2026-10-01 00:59
+- Notes: Needs @human approval. Everything since "Initial commit" is uncommitted. Do NOT add `server/*.db*`,
+  `server/growengine.db*`, `server/baileys_auth/`, `test.csv`. Smoke test (login → picker → project → leads) first.
+  → Committed bc73b88 on branch phase-0-foundation after API smoke test + client build.
 
 ### T-000 · Set up multi-agent environment
 - Status: DONE
@@ -202,7 +208,6 @@ _(none)_
 - Notes: Dockerfile copies build to `server/public/`, index.js only serves `../client/dist`. Serve
   `server/public` first, fall back to `client/dist`.
 
-
 ### T-003 · Make DB path configurable + fix docker-compose volume
 - Status: PARKED
 - Owner: —
@@ -212,6 +217,5 @@ _(none)_
 - Updated: 2026-10-01
 - Notes: compose mounts a named volume on the *file* `/app/server/leaddesk.db`. Add `DATA_DIR` env
   (default `server/`), mount `/app/data`. Keep existing installs working.
-
 
 ## Archive

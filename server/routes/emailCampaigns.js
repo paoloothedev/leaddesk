@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDB, logAudit } from '../db.js';
+import { isOwned } from '../lib/scope.js';
 import { authMiddleware, requirePermission } from './auth.js';
 import crypto from 'crypto';
 
@@ -90,6 +91,8 @@ router.post('/:id/leads', requirePermission('campaigns.edit'), (req, res) => {
 
 router.post('/:id/leads/:leadId', requirePermission('campaigns.edit'), (req, res) => {
   const db = getDB();
+  if (!isOwned('email_campaigns', req.project.id, req.params.id)) return res.status(404).json({ error: 'Not found' });
+  if (!isOwned('leads', req.project.id, req.params.leadId)) return res.status(404).json({ error: 'Lead not found' });
   db.prepare('INSERT OR IGNORE INTO email_campaign_leads (lead_id, campaign_id) VALUES (?, ?)').run(req.params.leadId, req.params.id);
   db.prepare('UPDATE email_campaigns SET total = (SELECT COUNT(*) FROM email_campaign_leads WHERE campaign_id = ?) WHERE id = ?').run(req.params.id, req.params.id);
   res.json({ ok: true });
@@ -97,6 +100,7 @@ router.post('/:id/leads/:leadId', requirePermission('campaigns.edit'), (req, res
 
 router.delete('/:id/leads/:leadId', requirePermission('campaigns.edit'), (req, res) => {
   const db = getDB();
+  if (!isOwned('email_campaigns', req.project.id, req.params.id)) return res.status(404).json({ error: 'Not found' });
   db.prepare('DELETE FROM email_campaign_leads WHERE lead_id = ? AND campaign_id = ?').run(req.params.leadId, req.params.id);
   db.prepare('UPDATE email_campaigns SET total = (SELECT COUNT(*) FROM email_campaign_leads WHERE campaign_id = ?) WHERE id = ?').run(req.params.id, req.params.id);
   res.json({ ok: true });

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDB } from '../db.js';
+import { ownedIds } from '../lib/scope.js';
 import { sendHumanMessage, getStatus } from '../whatsapp.js';
 
 const router = Router();
@@ -67,16 +68,20 @@ router.post('/', (req, res) => {
   if (!message || !leads || !leads.length) {
     return res.status(400).json({ error: 'Message and leads required' });
   }
+  // Only this project's leads; phone always comes from the DB, never from the request
+  const ids = ownedIds('leads', projectId, leads.map(l => l?.id));
+  if (!ids.length) return res.status(400).json({ error: 'No valid leads' });
+  const getPhone = db.prepare('SELECT phone FROM leads WHERE id = ?');
 
   const id = 'job_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
   const now = Date.now();
 
   db.prepare(`INSERT INTO broadcast_jobs (id, campaign_id, message, delay_min, delay_max, status, total, created_at, project_id)
-    VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`).run(id, campaignId || null, message, delayMin || 1, delayMax || 5, leads.length, now, projectId);
+    VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`).run(id, campaignId || null, message, delayMin || 1, delayMax || 5, ids.length, now, projectId);
 
   const insertLead = db.prepare('INSERT INTO job_leads (job_id, lead_id, phone, status) VALUES (?, ?, ?, ?)');
-  for (const l of leads) {
-    insertLead.run(id, l.id, l.phone || '', 'pending');
+  for (const leadId of ids) {
+    insertLead.run(id, leadId, getPhone.get(leadId)?.phone || '', 'pending');
   }
 
   const job = db.prepare('SELECT * FROM broadcast_jobs WHERE id = ?').get(id);

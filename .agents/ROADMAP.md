@@ -154,16 +154,32 @@ Phase 0 + E1.1–E1.4, E1.6, E1.7 + E2.1, E2.2 + E3.1 + E3.2.
 Result: contacts & companies, deals with a kanban pipeline, owners, timeline, tasks, WhatsApp two-way inbox,
 email sending — plus the Google Maps + WhatsApp outreach we already have.
 
-## Open decisions for @human
+## Decisions (answered by @human 2026-10-01 — all recommendations accepted)
 
-- **D1 Leads vs clients**: merge into one `contacts` table with a lifecycle stage (recommended — one place
-  for history, how HubSpot works), or keep them separate?
-- **D2 Current stages**: keep existing lead stages as the *contact outreach status*, and give deals their own
-  pipelines (recommended), or move everything onto deals?
-- **D3 Target users**: single company self-hosting (current), or one install serving several client
-  businesses (agency / SaaS mode → needs stronger tenant isolation, billing, signup)?
-- **D4 Database**: stay on SQLite (recommended up to ~a few hundred thousand records and ~20 users), or plan
-  for Postgres now?
-- **D5 WhatsApp**: stay on Baileys (free, unofficial, ban risk) or also support the official WhatsApp Cloud
-  API (paid per conversation, no ban risk, needs Meta business verification)?
-- **D6 Language**: is Arabic/RTL needed in the first milestone?
+- **D1 ✅ Merge leads + clients** into one `contacts` table with `lifecycle_stage`.
+- **D2 ✅ Existing stages = contact outreach status**; deals get their own pipelines.
+- **D3 ✅ Agency mode.** One install is run by an agency that manages many client businesses. A
+  *project* = one client business ("workspace"). Consequences below.
+- **D4 ✅ SQLite** stays. Keep SQL portable-ish (no SQLite-only tricks in business logic) in case of a later move.
+- **D5 ✅ Baileys now**, but all messaging goes through a channel abstraction (`channels/whatsapp-baileys`,
+  later `channels/whatsapp-cloud`, `channels/email`) so the official Cloud API can be added per workspace.
+- **D6 ✅ Arabic/RTL later** (Phase 7), not in the first milestone. New UI text should stay easy to extract
+  (no strings built by concatenation).
+
+### What agency mode (D3) adds to the plan
+
+- **Roles** (E0.7, now P0): `agency_admin` (all workspaces, billing/settings), `agency_staff` (only assigned
+  workspaces), `client_user` (only their own workspace, limited permissions — e.g. see inbox & deals, not
+  settings). Per-workspace membership table; `resolveProject` enforces it on every request **and** socket.
+- **Strict tenant isolation** is a P0 bug class: every foreign id in a request must belong to the workspace
+  (T-004). Add an isolation test suite that runs every endpoint cross-workspace.
+- **Per-workspace config**: WhatsApp number (already), SMTP/IMAP, branding (logo, colour, name shown to
+  client users), currency, timezone, country code.
+- **Workspace templates** (Phase 1): create a new client from a template — pipelines, stages, tags, custom
+  fields, message templates, automations copied.
+- **Agency overview** (Phase 5): one dashboard across all workspaces — leads added, messages sent, deals won,
+  WA connection health, per client.
+- **Limits per workspace** (Phase 4): daily WA cap, email cap, seats — so one client can't burn the agency's
+  resources.
+- **Client portal** (Phase 7): white-labelled login for client users.
+- UI rename: "Project" → "Workspace" / "Client" in the interface (DB keeps `project_id`).

@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AUTH_ROOT = path.join(__dirname, 'baileys_auth');
+const AUTH_ROOT = process.env.WA_AUTH_DIR || path.join(__dirname, 'baileys_auth');
 
 // projectId -> client state
 const clients = new Map();
@@ -328,6 +328,13 @@ export async function destroyAllClients() {
   for (const projectId of Array.from(clients.keys())) {
     try { await destroyClient(projectId); } catch {}
   }
+}
+
+// Called when a project is deleted: close its socket and remove its session files.
+export async function removeProjectAuth(projectId) {
+  await destroyClient(projectId);
+  clients.delete(projectId);
+  try { fs.rmSync(path.join(AUTH_ROOT, projectId), { recursive: true, force: true }); } catch {}
 }
 
 export function formatPhoneForWA(phone) {

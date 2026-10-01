@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDB, logAudit } from '../db.js';
+import { ownedIds, isOwned } from '../lib/scope.js';
 import { authMiddleware, requirePermission } from './auth.js';
 import crypto from 'crypto';
 
@@ -53,13 +54,14 @@ router.post('/', requirePermission('leads.edit'), (req, res) => {
   const { name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, stage, source, assigned_to, tag_ids, lead_id } = req.body;
   const id = crypto.randomUUID();
   const now = Date.now();
+  if (lead_id && !isOwned('leads', req.project.id, lead_id)) return res.status(400).json({ error: 'Invalid lead' });
 
   db.prepare(`INSERT INTO clients (id, lead_id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, stage, source, assigned_to, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, lead_id || null, name || '', phone || '', phone_valid ? 1 : 0, email || '', facebook || '', instagram || '', tiktok || '', link || '', location || '', notes || '', status || 'active', stage || 'new', source || '', assigned_to || null, now, req.project.id);
 
   if (tag_ids?.length) {
     const stmt = db.prepare('INSERT OR IGNORE INTO client_tags (client_id, tag_id) VALUES (?, ?)');
-    for (const tid of tag_ids) stmt.run(id, tid);
+    for (const tid of ownedIds('tags', req.project.id, tag_ids)) stmt.run(id, tid);
   }
 
   db.prepare('INSERT INTO client_activities (client_id, account_id, action, details, created_at) VALUES (?, ?, ?, ?, ?)')
@@ -88,7 +90,7 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
   if (tag_ids !== undefined) {
     db.prepare('DELETE FROM client_tags WHERE client_id = ?').run(req.params.id);
     const stmt = db.prepare('INSERT OR IGNORE INTO client_tags (client_id, tag_id) VALUES (?, ?)');
-    for (const tid of tag_ids) stmt.run(req.params.id, tid);
+    for (const tid of ownedIds('tags', req.project.id, tag_ids)) stmt.run(req.params.id, tid);
   }
 
   const changes = [];
@@ -118,6 +120,7 @@ router.post('/:id/activity', requirePermission('leads.edit'), (req, res) => {
   const db = getDB();
   const { action, details } = req.body;
   if (!action) return res.status(400).json({ error: 'Action required' });
+  if (!isOwned('clients', req.project.id, req.params.id)) return res.status(404).json({ error: 'Client not found' });
   const now = Date.now();
   db.prepare('INSERT INTO client_activities (client_id, account_id, action, details, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(req.params.id, req.user.id, action, JSON.stringify(details || {}), now);

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { scrapeGmaps } from './scraper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const JOBS_FILE = path.join(__dirname, 'jobs_data.json');
+const JOBS_FILE = process.env.GMAPS_JOBS_FILE || path.join(__dirname, 'jobs_data.json');
 
 const jobs = new Map();
 
@@ -124,26 +124,37 @@ async function runJob(id) {
 function getJob(id, projectId = null) {
   const job = jobs.get(id) || null;
   if (!job) return null;
-  if (projectId && job.projectId && job.projectId !== projectId) return null;
+  if (projectId && job.projectId !== projectId) return null;
   return job;
 }
 
 function listJobs(projectId = null) {
   let list = Array.from(jobs.values());
-  if (projectId) list = list.filter(j => !j.projectId || j.projectId === projectId);
+  if (projectId) list = list.filter(j => j.projectId === projectId);
   return list.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 function deleteJob(id, projectId = null) {
   const job = jobs.get(id);
   if (!job) return false;
-  if (projectId && job.projectId && job.projectId !== projectId) return false;
+  if (projectId && job.projectId !== projectId) return false;
   if (job.status === 'running') return false;
   jobs.delete(id);
   saveJobs();
   return true;
 }
 
-export { createJob, getJob, listJobs, deleteJob };
+// Jobs created before multi-project support have no projectId; give them to the default project
+// so they don't show up in every workspace.
+function adoptLegacyJobs(defaultProjectId) {
+  if (!defaultProjectId) return;
+  let changed = 0;
+  for (const job of jobs.values()) {
+    if (!job.projectId) { job.projectId = defaultProjectId; changed++; }
+  }
+  if (changed) { saveJobs(); console.log(`[gmaps] Assigned ${changed} legacy jobs to ${defaultProjectId}`); }
+}
+
+export { createJob, getJob, listJobs, deleteJob, adoptLegacyJobs };
 
 loadJobs();

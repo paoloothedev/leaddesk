@@ -19,3 +19,14 @@ Docker work is parked (T-002, T-003 moved to PARKED).
 - Changed: new .agents/ROADMAP.md (Phases 0–7, epics E0.1–E7.7, MVP milestone, open decisions D1–D6);
   BOARD: added Phase 0 tasks T-013…T-017 and T-018 (decisions); AGENTS.md now states the goal.
 - Rule: no Phase 1+ feature work until Phase 0 is done and D1–D6 are answered.
+---
+**2026-10-01 01:40 · lead-claude → @all** · `T-004, T-012` · DONE
+- Changed: new server/lib/scope.js (ownedIds/isOwned); ownership checks in routes/leads, campaigns, clients,
+  emailCampaigns, jobs (phones now read from DB, not request), gmaps/jobs (strict projectId + adoptLegacyJobs);
+  project delete uses whatsapp.removeProjectAuth(); env overrides GMAPS_JOBS_FILE, WA_AUTH_DIR (+ DB_PATH);
+  new server/test/ harness + 12 tests; AGENTS.md/ARCHITECTURE.md updated.
+- Verified: `npm test --prefix server` → 12/12 pass; with the route fixes stashed, 4 isolation tests fail.
+- Follow-ups: none new. CONTRACT: POST /leads now defaults stage_id to the first stage if omitted, 409 on
+  duplicate client-supplied id; POST /jobs total = number of *owned* leads.
+- Gotchas: dev box is Alpine — better-sqlite3 prebuilt was re-downloaded for musl; node_modules/.bin symlinks
+  are broken (copied tree), call tools via node_modules/<pkg>/bin paths. Port 3001 = unrelated app.
