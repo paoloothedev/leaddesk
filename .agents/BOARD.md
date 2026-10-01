@@ -16,6 +16,17 @@ _(none)_
 
 ## REVIEW
 
+### T-024 · Deals UI: kanban board + pipeline settings
+- Status: REVIEW
+- Owner: lead-claude
+- Role: frontend
+- Priority: P0
+- Files: client/src/components/DealsBoard.jsx (new), DealModal.jsx (new), PipelineSettings.jsx (new), client/src/api.js, App.jsx, Sidebar.jsx, Settings.jsx
+- Depends on: T-022
+- Updated: 2026-10-01 01:29
+- Notes: Drag & drop between stages (no new dependency unless @lead agrees), column totals (count + value), won/lost actions with lost reason.
+  → DealsBoard.jsx (kanban, native DnD, totals, lost-reason prompt, idle badges, owner filter), DealModal.jsx, RecordPicker.jsx, PipelineSettings.jsx (Settings → Pipelines), format.js, api.js; GET /projects/:id/members for owner pickers. Build OK; NOT visually checked — needs a browser pass (light/dark, mobile, drag & drop).
+
 _(none)_
 
 ## TODO
@@ -40,16 +51,6 @@ _(none)_
 - Depends on: T-020
 - Updated: 2026-10-01 01:15
 - Notes: Lifecycle filter chips + column; convert-to-client becomes 'mark as customer'.
-
-### T-024 · Deals UI: kanban board + pipeline settings
-- Status: TODO
-- Owner: —
-- Role: frontend
-- Priority: P0
-- Files: client/src/components/DealsBoard.jsx (new), DealModal.jsx (new), PipelineSettings.jsx (new), client/src/api.js, App.jsx, Sidebar.jsx, Settings.jsx
-- Depends on: T-022
-- Updated: 2026-10-01 01:15
-- Notes: Drag & drop between stages (no new dependency unless @lead agrees), column totals (count + value), won/lost actions with lost reason.
 
 ### T-025 · Custom fields backend (migration 009)
 - Status: TODO

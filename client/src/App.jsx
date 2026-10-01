@@ -17,6 +17,7 @@ import Login from './components/Login'
 import ClientsList from './components/ClientsList'
 import GoogleMapsScraper from './components/GoogleMapsScraper'
 import ProjectPicker from './components/ProjectPicker'
+import DealsBoard from './components/DealsBoard'
 import { getStats, getStages, getTags, getCampaigns, getSettings, getProjects, setCurrentProjectId } from './api'
 
 const pageVariants = {
@@ -25,7 +26,7 @@ const pageVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 }
 
-const VIEWS = ['dashboard', 'leads', 'clients', 'scraper', 'campaigns', 'dead', 'settings', 'import']
+const VIEWS = ['dashboard', 'leads', 'deals', 'clients', 'scraper', 'campaigns', 'dead', 'settings', 'import']
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
@@ -253,6 +254,8 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
         return <Dashboard stats={stats} loadStats={loadStats} refreshId={refreshId} goView={goView} openLeadModal={openLeadModal} />
       case 'leads':
         return <LeadsTable stages={stages} tags={tags} campaigns={campaigns} refreshId={refreshId} openLeadModal={openLeadModal} showToast={showToast} refresh={refresh} goView={goView} />
+      case 'deals':
+        return <DealsBoard user={user} refreshId={refreshId} showToast={showToast} goView={goView} />
       case 'clients':
         return <ClientsList stages={stages} tags={tags} refreshId={refreshId} showToast={showToast} refresh={refresh} openLeadModal={openLeadModal} />
       case 'scraper':

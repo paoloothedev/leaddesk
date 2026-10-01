@@ -2,13 +2,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   ChartLine, Users, Skull, Megaphone, GearSix, Upload,
-  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo, SquaresFour
-} from '@phosphor-icons/react'
+  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo, SquaresFour, Handshake } from '@phosphor-icons/react'
 import { can } from '../permissions'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: ChartLine, perms: ['dashboard.view', 'leads.view'] },
   { id: 'leads', label: 'All Leads', icon: Users, perms: ['leads.view'] },
+  { id: 'deals', label: 'Deals', icon: Handshake, perms: ['deals.view'] },
   { id: 'clients', label: 'Clients', icon: UserCircle, perms: ['leads.view'] },
   { id: 'scraper', label: 'Maps Scraper', icon: MagnifyingGlass, perms: ['leads.import'] },
   { id: 'campaigns', label: 'Campaigns', icon: Megaphone, perms: ['campaigns.view'] },

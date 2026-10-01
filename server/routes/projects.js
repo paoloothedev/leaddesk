@@ -32,6 +32,18 @@ router.get('/', (req, res) => {
   res.json(enriched);
 });
 
+// People who can be assigned records in a workspace (owner pickers): admins + members.
+router.get('/:id/members', (req, res) => {
+  const db = getDB();
+  if (!canAccessProject(req.user, req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const rows = db.prepare(`
+    SELECT id, username, display_name, role FROM accounts
+    WHERE role = 'admin' OR id IN (SELECT account_id FROM project_members WHERE project_id = ?)
+    ORDER BY display_name, username
+  `).all(req.params.id);
+  res.json(rows);
+});
+
 // Create project
 router.post('/', requirePermission('projects.manage'), (req, res) => {
   const { name, color, icon } = req.body;

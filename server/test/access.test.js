@@ -82,3 +82,10 @@ test('admin can move a user between workspaces', async () => {
   assert.equal((await u.c.as(A).get('/leads')).status, 404);
   assert.equal((await u.c.as(B).get('/leads')).status, 200);
 });
+
+test('workspace members list is visible to members only', async () => {
+  const u = await makeUser(admin, 'memberlist', ['leads.view'], [A]);
+  const names = (await u.c.get(`/projects/${A}/members`)).body.map(m => m.username);
+  assert.ok(names.includes('admin') && names.includes('memberlist'));
+  assert.equal((await u.c.get(`/projects/${B}/members`)).status, 404);
+});

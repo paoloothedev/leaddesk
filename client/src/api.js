@@ -271,3 +271,89 @@ export async function downloadGmapsCSV(id) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ── Contacts (same records as leads) ───────────────────────────
+export function getContacts(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request('/contacts' + (qs ? '?' + qs : ''));
+}
+export function getContact(id) {
+  return request('/contacts/' + id);
+}
+
+// ── Workspace members (owner pickers) ──────────────────────────
+export function getProjectMembers(projectId = currentProjectId) {
+  return request('/projects/' + projectId + '/members');
+}
+
+// ── Companies ───────────────────────────────────────────────────
+export function getCompanies(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request('/companies' + (qs ? '?' + qs : ''));
+}
+export function getCompany(id) {
+  return request('/companies/' + id);
+}
+export function createCompany(data) {
+  return request('/companies', { method: 'POST', body: JSON.stringify(data) });
+}
+export function updateCompany(id, data) {
+  return request('/companies/' + id, { method: 'PUT', body: JSON.stringify(data) });
+}
+export function deleteCompany(id) {
+  return request('/companies/' + id, { method: 'DELETE' });
+}
+export function linkCompanyContacts(id, contactIds) {
+  return request('/companies/' + id + '/contacts', { method: 'POST', body: JSON.stringify({ contactIds }) });
+}
+
+// ── Pipelines ───────────────────────────────────────────────────
+export function getPipelines() {
+  return request('/pipelines');
+}
+export function createPipeline(data) {
+  return request('/pipelines', { method: 'POST', body: JSON.stringify(data) });
+}
+export function updatePipeline(id, data) {
+  return request('/pipelines/' + id, { method: 'PUT', body: JSON.stringify(data) });
+}
+export function deletePipeline(id) {
+  return request('/pipelines/' + id, { method: 'DELETE' });
+}
+export function createPipelineStage(pipelineId, data) {
+  return request('/pipelines/' + pipelineId + '/stages', { method: 'POST', body: JSON.stringify(data) });
+}
+export function updatePipelineStage(stageId, data) {
+  return request('/pipelines/stages/' + stageId, { method: 'PUT', body: JSON.stringify(data) });
+}
+export function deletePipelineStage(stageId, moveTo) {
+  return request('/pipelines/stages/' + stageId + (moveTo ? '?moveTo=' + encodeURIComponent(moveTo) : ''), { method: 'DELETE' });
+}
+export function reorderPipelineStages(pipelineId, orderedIds) {
+  return request('/pipelines/' + pipelineId + '/stages/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+}
+
+// ── Deals ───────────────────────────────────────────────────────
+export function getDeals(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request('/deals' + (qs ? '?' + qs : ''));
+}
+export function getDealsBoard(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request('/deals/board' + (qs ? '?' + qs : ''));
+}
+export function getDeal(id) {
+  return request('/deals/' + id);
+}
+export function createDeal(data) {
+  return request('/deals', { method: 'POST', body: JSON.stringify(data) });
+}
+export function updateDeal(id, data) {
+  return request('/deals/' + id, { method: 'PUT', body: JSON.stringify(data) });
+}
+export function moveDeal(id, stageId, lostReason) {
+  return request('/deals/' + id + '/move', { method: 'POST', body: JSON.stringify({ stage_id: stageId, lost_reason: lostReason }) });
+}
+export function deleteDeal(id) {
+  return request('/deals/' + id, { method: 'DELETE' });
+}
