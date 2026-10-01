@@ -19,6 +19,7 @@ import gmapsRouter from './routes/gmaps.js';
 import projectsRouter from './routes/projects.js';
 import { resolveProject, canAccessProject } from './middleware/project.js';
 import { adoptLegacyJobs } from './gmaps/jobs.js';
+import { startWorker, stopWorker } from './worker/index.js';
 import { initClient, getStatus, onStatusChange, destroyClient, destroyAllClients, logoutClient, migrateLegacyAuth } from './whatsapp.js';
 
 import os from 'os';
@@ -29,6 +30,7 @@ process.on('unhandledRejection', (err) => {
 
 const shutdown = async () => {
   console.log('Shutting down, cleaning up WhatsApp...');
+  stopWorker();
   try { await destroyAllClients(); } catch {}
   process.exit(0);
 };
@@ -429,6 +431,9 @@ server.listen(PORT, HOST, () => {
   setTimeout(() => {
     try { resumeAllProjectJobs(); } catch {}
   }, 3000);
+
+  // Background job queue (reminders, email, sequences…). WORKER=off disables it, e.g. for a second instance.
+  if (process.env.WORKER !== 'off') startWorker();
 
   // WhatsApp clients are now lazy-initialized per project (no global boot init)
   console.log('  WhatsApp: clients initialize per-project on demand.\n');

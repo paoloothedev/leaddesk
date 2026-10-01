@@ -50,18 +50,19 @@ _(none)_
 - Updated: 2026-10-01
 - Notes: `loadJobs()` flips running→pending but nothing calls `runJob()` again.
 
+## DONE
+
 ### T-016 · DB-backed background worker (E0.6)
-- Status: TODO
-- Owner: —
+- Status: DONE
+- Owner: lead-claude
 - Role: backend
 - Priority: P0
 - Files: server/worker/** (new), server/index.js (start worker), migration via T-013
 - Depends on: T-013
-- Updated: 2026-10-01
+- Updated: 2026-10-01 01:12
 - Notes: `queue(id, type, payload, run_at, attempts, status, last_error, project_id)`; `enqueue(type, payload,
   {runAt})`, handler registry, retries with backoff, survives restart. Don't migrate broadcasts onto it yet.
-
-## DONE
+  → worker/index.js + migration 004; started in index.js (WORKER=off to disable); test/worker.test.js (in-process).
 
 ### T-015 · Frontend pagination for leads & clients (E0.5)
 - Status: DONE

@@ -120,6 +120,15 @@ and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin).
 - `sendHumanMessage()` simulates presence + typing (≥3 s, 25 ms/char) and random sleeps; `parseSpintax()`
   expands `{a|b|c}`. `checkPhones()` uses `onWhatsApp`.
 
+### Background worker (`server/worker/index.js`, migration 004)
+- Durable queue in the `queue` table, polled every 1 s inside the server process (concurrency 2). Disable with
+  `WORKER=off`. `registerHandler(type, fn)` at module load; `enqueue(type, payload, { projectId, runAt,
+  maxAttempts, dedupeKey })`; `cancelJobs({ type, projectId, dedupeKey })`.
+- Failures retry with backoff 30 s × 2^(attempt-1) until `max_attempts`, then `failed` (kept, with
+  `last_error`). Jobs left `running` at startup are re-queued → **handlers must be idempotent**.
+- `done`/`cancelled` rows are pruned after 7 days. Use it for reminders, email sending, sequences, automations.
+  (Broadcasts and Google Maps scrapes still use their own runners — migrate them later.)
+
 ### Broadcast jobs (`server/routes/jobs.js`)
 - Per-project in-memory state (`projectStates`): `processingJobId`, `consecutiveFails`, `messagesSentToday`
   (resets at local midnight; **not persisted** — restart resets the daily counter).

@@ -4,8 +4,9 @@
 import * as m001 from './001-baseline.js';
 import * as m002 from './002-project-members.js';
 import * as m003 from './003-list-indexes.js';
+import * as m004 from './004-queue.js';
 
-export const MIGRATIONS = [m001, m002, m003];
+export const MIGRATIONS = [m001, m002, m003, m004];
 
 export function runMigrations(db) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)');

@@ -62,3 +62,8 @@ Agency-mode access control is in.
 - Verified: npm test 25/25; client build OK. Not visually checked (no browser on box).
 - CONTRACT: GET /leads and /clients return `{items,total,page,limit}` when `page` is passed, plain array otherwise.
   "Select all" in LeadsTable now selects the current page only.
+---
+**2026-10-01 03:30 · lead-claude → @all** · `T-016` · DONE
+Background queue available: `import { registerHandler, enqueue } from '../worker/index.js'`. Handlers must be
+idempotent. See ARCHITECTURE §4 "Background worker".
+- Verified: npm test 30/30 (worker.test.js covers run, schedule, retry/backoff, permanent failure, dedupe, cancel).
