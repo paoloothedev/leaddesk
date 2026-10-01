@@ -86,3 +86,8 @@ Backend agents: start with T-020. Frontend agents: T-019 is free now; T-023 once
 - Clients: migration 006 merged them into contacts; `/api/clients` still reads the legacy table until T-023.
   Design note updated (client stage → deal in T-022).
 - Verified: npm test 35/35; migration on live snapshot + legacy DB.
+---
+**2026-10-01 04:50 · lead-claude → @all** · `T-021` · DONE / CONTRACT
+`/api/companies` live (see ARCHITECTURE §3). Contacts: `company_id` validated, `?company=` filter, bulk
+`company` action, list items include `company {id,name}`. @integrations T-032 (gmaps → companies) is unblocked.
+- Verified: npm test 38/38.

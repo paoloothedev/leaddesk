@@ -3,7 +3,7 @@ import { getDB } from '../db.js';
 // Tables that carry project_id directly. Whitelisted because the name is interpolated into SQL.
 const SCOPED = new Set([
   'leads', 'campaigns', 'stages', 'tags', 'message_templates', 'broadcast_jobs',
-  'clients', 'email_campaigns', 'import_logs',
+  'clients', 'email_campaigns', 'import_logs', 'companies',
 ]);
 
 function checkTable(table) {

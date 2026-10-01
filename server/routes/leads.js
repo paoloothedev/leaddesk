@@ -37,6 +37,10 @@ function contactFields(body, projectId) {
     if (body.owner_id !== null && !isProjectMember(projectId, body.owner_id)) return { error: 'Owner must be a member of this workspace' };
     sets.owner_id = body.owner_id;
   }
+  if (body.company_id !== undefined) {
+    if (body.company_id !== null && !isOwned('companies', projectId, body.company_id)) return { error: 'Invalid company' };
+    sets.company_id = body.company_id;
+  }
   if (body.source !== undefined) sets.source = String(body.source || '').slice(0, 50);
   if (body.custom !== undefined) {
     if (!body.custom || typeof body.custom !== 'object' || Array.isArray(body.custom)) return { error: 'custom must be an object' };
@@ -59,7 +63,7 @@ function parseCustom(l) {
 router.get('/', requirePermission('leads.view'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
-  const { search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder, lifecycle, owner, source } = req.query;
+  const { search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder, lifecycle, owner, source, company } = req.query;
 
   let sql = 'SELECT * FROM leads WHERE project_id = ?';
   const params = [projectId];
@@ -90,6 +94,9 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
   else if (owner) { sql += ' AND owner_id = ?'; params.push(owner); }
 
   if (source) { sql += ' AND source = ?'; params.push(source); }
+
+  if (company === 'none') { sql += ' AND company_id IS NULL'; }
+  else if (company) { sql += ' AND company_id = ?'; params.push(company); }
 
   if (verified === 'yes') { sql += ' AND verified = 1'; }
   else if (verified === 'no') { sql += ' AND verified = 0'; }
@@ -146,12 +153,15 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
     INNER JOIN lead_tags lt ON lt.tag_id = t.id
     WHERE lt.lead_id IN (${ph})
   `);
+  const companyIds = [...new Set(leads.map(l => l.company_id).filter(Boolean))];
+  const companiesBy = groupBy(db, companyIds, ph => `SELECT id AS k, id, name FROM companies WHERE id IN (${ph})`);
 
   const enriched = leads.map(l => ({
     ...l,
     verified: !!l.verified,
     phone_valid: !!l.phone_valid,
     custom: parseCustom(l),
+    company: l.company_id ? companiesBy.get(l.company_id)?.[0] || null : null,
     campaigns: campaignsBy.get(l.id) || [],
     stageHistory: historyBy.get(l.id) || [],
     tags: tagsBy.get(l.id) || [],
@@ -168,6 +178,7 @@ router.get('/:id', requirePermission('leads.view'), (req, res) => {
   lead.verified = !!lead.verified;
   lead.phone_valid = !!lead.phone_valid;
   lead.custom = parseCustom(lead);
+  lead.company = lead.company_id ? db.prepare('SELECT id, name FROM companies WHERE id = ?').get(lead.company_id) || null : null;
   lead.campaigns = db.prepare(`
     SELECT c.id, c.name FROM campaigns c
     INNER JOIN campaign_leads cl ON cl.campaign_id = c.id WHERE cl.lead_id = ?
@@ -295,6 +306,7 @@ router.post('/bulk', requirePermission('leads.edit', 'leads.verify', 'leads.dele
   if (action === 'stage' && !isOwned('stages', projectId, stageId)) return res.status(400).json({ error: 'Invalid stage' });
   if ((action === 'tag' || action === 'untag') && !isOwned('tags', projectId, tagId)) return res.status(400).json({ error: 'Invalid tag' });
   if (action === 'lifecycle' && !LIFECYCLES.includes(value)) return res.status(400).json({ error: 'Invalid lifecycle' });
+  if (action === 'company' && value !== null && !isOwned('companies', projectId, value)) return res.status(400).json({ error: 'Invalid company' });
   if (action === 'owner' && value !== null && !isProjectMember(projectId, value)) return res.status(400).json({ error: 'Owner must be a member of this workspace' });
 
   // Only allow acting on leads in this project
@@ -322,6 +334,8 @@ router.post('/bulk', requirePermission('leads.edit', 'leads.verify', 'leads.dele
     db.prepare(`DELETE FROM leads WHERE id IN (${ownedPh})`).run(...ownedIds);
   } else if (action === 'lifecycle') {
     db.prepare(`UPDATE leads SET lifecycle = ?, updated_at = ? WHERE id IN (${ownedPh})`).run(value, now, ...ownedIds);
+  } else if (action === 'company') {
+    db.prepare(`UPDATE leads SET company_id = ?, updated_at = ? WHERE id IN (${ownedPh})`).run(value, now, ...ownedIds);
   } else if (action === 'owner') {
     db.prepare(`UPDATE leads SET owner_id = ?, updated_at = ? WHERE id IN (${ownedPh})`).run(value, now, ...ownedIds);
   } else if (action === 'convert') {

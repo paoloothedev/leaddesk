@@ -65,6 +65,7 @@ Scoped by `project_id` (see `SCOPED_TABLES` in `db.js`):
 | `import_logs` | id, filename, rows_total, added, skipped, updated, details | |
 | `audit_log` | action, entity_type, entity_id, entity_name, details(JSON), created_at | via `logAudit()` |
 | `settings` | PK (project_id, key), value | e.g. `country_code` |
+| `companies` | id (`comp_…`), name, domain (normalised), industry, size, phone, email, website, address, city, country, notes, owner_id, source, custom (JSON), created_at, updated_at | Contacts link via `leads.company_id` (migration 007) |
 
 Join / child tables (scoped through their parent — always verify the parent's project):
 `campaign_leads(lead_id, campaign_id)`, `stage_history(lead_id, stage_id, at)`, `lead_tags(lead_id, tag_id)`,
@@ -91,7 +92,8 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/auth` | routes/auth.js | POST login, POST logout, GET me, GET permissions |
 | `/projects` | routes/projects.js | GET / (member workspaces + counts), POST / (`projects.manage`), PUT /:id, DELETE /:id (`projects.manage`; cascade delete + removes WA auth dir) |
 | `/accounts` | routes/accounts.js | GET/PUT me, GET / (self + created accounts; includes `projectIds`), POST /, PUT /:id (`permissions`, `projectIds`), DELETE /:id, POST /:id/change-password |
-| `/leads` = `/contacts` | routes/leads.js | GET / (optional `page`/`limit` → `{items,total,page,limit}`, else array; filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, lifecycle (comma list), owner (me/none/id), source, sortBy, sortOrder), GET/PUT/DELETE /:id (body also takes lifecycle, owner_id, source, custom), POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert/lifecycle/owner with `value`), POST /import/preview (multer CSV), POST /import/confirm |
+| `/leads` = `/contacts` | routes/leads.js | GET / (optional `page`/`limit` → `{items,total,page,limit}`, else array; filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, lifecycle (comma list), owner (me/none/id), source, sortBy, sortOrder), GET/PUT/DELETE /:id (body also takes lifecycle, owner_id, source, custom), POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert/lifecycle/owner/company with `value`); list filter `company=<id>|none`; items include `company {id,name}`, POST /import/preview (multer CSV), POST /import/confirm |
+| `/companies` | routes/companies.js | GET / (page/limit, search, owner, industry; items have `contact_count`), GET /:id (+ `contacts`), POST, PUT /:id, DELETE /:id (unlinks contacts), POST /:id/contacts {contactIds}, DELETE /:id/contacts/:contactId |
 | `/stages` | routes/stages.js | CRUD (GET includes `lead_count`) + POST /reorder |
 | `/tags` | routes/tags.js | CRUD (GET includes lead_count) |
 | `/templates` | routes/templates.js | CRUD |

@@ -31,16 +31,6 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
 
-### T-021 · Companies backend (migration 007, /api/companies)
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P0
-- Files: server/migrations/007-companies.js, server/routes/companies.js (new), server/index.js, server/lib/scope.js, server/routes/projects.js, server/test/companies.test.js
-- Depends on: T-020
-- Updated: 2026-10-01 01:15
-- Notes: Spec: PHASE-1-DESIGN § Companies. Include contacts count + linking/unlinking contacts.
-
 ### T-022 · Pipelines & deals backend (migration 008)
 - Status: TODO
 - Owner: —
@@ -151,6 +141,17 @@ _(none)_
 - Notes: Dedupe company by name+phone within workspace; source='gmaps'.
 
 ## DONE
+
+### T-021 · Companies backend (migration 007, /api/companies)
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P0
+- Files: server/migrations/007-companies.js, server/routes/companies.js (new), server/index.js, server/lib/scope.js, server/routes/projects.js, server/test/companies.test.js
+- Depends on: T-020
+- Updated: 2026-10-01 01:21
+- Notes: Spec: PHASE-1-DESIGN § Companies. Include contacts count + linking/unlinking contacts.
+  → Migration 007, routes/companies.js, contact company_id validation/filter/bulk. test/companies.test.js.
 
 ### T-020 · Contacts: merge clients into leads (migration 006) + /api/contacts
 - Status: DONE
