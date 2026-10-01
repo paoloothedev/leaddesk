@@ -14,36 +14,32 @@ const projectStates = new Map();
 
 function getState(projectId) {
   if (!projectStates.has(projectId)) {
-    const state = {
+    projectStates.set(projectId, {
       projectId,
       processorTimer: null,
       processingJobId: null,
       consecutiveFails: 0,
-      messagesSentToday: 0,
-      dayResetTimer: null,
-    };
-    state.dayResetTimer = setTimeout(() => {
-      state.messagesSentToday = 0;
-      scheduleDayReset(state);
-    }, msUntilMidnight());
-    projectStates.set(projectId, state);
+    });
   }
   return projectStates.get(projectId);
 }
 
-function msUntilMidnight() {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0);
-  return midnight.getTime() - now.getTime();
+// Daily send counter lives in the DB (migration 005) so restarts don't reset the anti-ban limit.
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function scheduleDayReset(state) {
-  if (state.dayResetTimer) clearTimeout(state.dayResetTimer);
-  state.dayResetTimer = setTimeout(() => {
-    state.messagesSentToday = 0;
-    scheduleDayReset(state);
-  }, msUntilMidnight());
+export function sentToday(projectId) {
+  const row = getDB().prepare('SELECT sent FROM wa_daily_counts WHERE project_id = ? AND day = ?').get(projectId, today());
+  return row?.sent || 0;
+}
+
+function countSent(projectId) {
+  getDB().prepare(`
+    INSERT INTO wa_daily_counts (project_id, day, sent) VALUES (?, ?, 1)
+    ON CONFLICT(project_id, day) DO UPDATE SET sent = sent + 1
+  `).run(projectId, today());
 }
 
 function randomBetween(min, max) {
@@ -99,8 +95,8 @@ router.get('/', requirePermission('broadcast.view', 'campaigns.send'), (req, res
 });
 
 router.get('/daily-status', requirePermission('broadcast.view', 'campaigns.send'), (req, res) => {
-  const state = getState(req.project.id);
-  res.json({ sent: state.messagesSentToday, limit: DAILY_LIMIT, remaining: DAILY_LIMIT - state.messagesSentToday });
+  const sent = sentToday(req.project.id);
+  res.json({ sent, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - sent) });
 });
 
 router.get('/:id', requirePermission('broadcast.view', 'campaigns.send'), (req, res) => {
@@ -224,7 +220,7 @@ async function runJob(projectId, jobId) {
       return;
     }
 
-    if (state.messagesSentToday >= DAILY_LIMIT) {
+    if (sentToday(projectId) >= DAILY_LIMIT) {
       console.log(`[wa:${projectId}] Daily limit reached (${DAILY_LIMIT}). Pausing job.`);
       db.prepare("UPDATE broadcast_jobs SET status = 'paused' WHERE id = ?").run(jobId);
       state.processingJobId = null;
@@ -246,7 +242,7 @@ async function runJob(projectId, jobId) {
         return;
       }
 
-      if (state.messagesSentToday >= DAILY_LIMIT) {
+      if (sentToday(projectId) >= DAILY_LIMIT) {
         console.log(`[wa:${projectId}] Daily limit reached (${DAILY_LIMIT}). Pausing job.`);
         db.prepare("UPDATE broadcast_jobs SET status = 'paused' WHERE id = ?").run(jobId);
         state.processingJobId = null;
@@ -258,7 +254,7 @@ async function runJob(projectId, jobId) {
         const personalMessage = replaceVariables(messages[mi], leadData);
         await sendHumanMessage(projectId, phone, personalMessage);
         state.consecutiveFails = 0;
-        state.messagesSentToday++;
+        countSent(projectId);
         messageIndex++;
         console.log(`[wa:${projectId}] Sent msg ${mi + 1}/${messages.length} (${messageIndex}/${job.total}) to ${phone}`);
       } catch (err) {

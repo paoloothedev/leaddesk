@@ -130,8 +130,8 @@ and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin).
   (Broadcasts and Google Maps scrapes still use their own runners — migrate them later.)
 
 ### Broadcast jobs (`server/routes/jobs.js`)
-- Per-project in-memory state (`projectStates`): `processingJobId`, `consecutiveFails`, `messagesSentToday`
-  (resets at local midnight; **not persisted** — restart resets the daily counter).
+- Per-project in-memory state (`projectStates`): `processingJobId`, `consecutiveFails`. The daily send count is
+  persisted in `wa_daily_counts(project_id, day)` (migration 005, local-date key) via `sentToday()`/`countSent()`.
 - Limits: `DAILY_LIMIT = 100`/project/day, `MAX_CONSECUTIVE_FAILS = 3` → pause 30 min.
 - Pacing: 30–75 s between leads, 60–180 s break every 10 messages, 10–30 s between messages of a sequence.
   `delay_min/delay_max` from the request are stored but **not used**.
@@ -141,8 +141,8 @@ and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin).
 ### Google Maps scraper (`server/gmaps/`)
 - `jobs.js`: jobs live in memory + `jobs_data.json` (not in SQLite; path overridable with `GMAPS_JOBS_FILE`).
   Each job has `projectId` and is only visible to that project; legacy jobs without one are assigned to the
-  oldest project at startup (`adoptLegacyJobs`). A running job restarted after crash becomes `pending` but is **not
-  re-run** automatically.
+  oldest project at startup (`adoptLegacyJobs`). A job interrupted by a restart becomes `pending` and is
+  re-run (sequentially, from scratch) by `resumePendingJobs()` at startup.
 - `scraper.js`: Playwright Chromium, rejects cookie consent, extracts `APP_INITIALIZATION_STATE`, scrolls
   `depth` times. Options: depth, lang, geo, zoom.
 - Import (`POST /gmaps/jobs/:id/import`): normalises phone with project `country_code`, dedupes by phone/name

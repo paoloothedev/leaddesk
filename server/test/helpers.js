@@ -37,6 +37,7 @@ export async function startServer() {
   const base = `http://127.0.0.1:${port}/api`;
   return {
     base,
+    dbPath: path.join(tmp, 'test.db'),
     async stop() {
       proc.removeAllListeners('exit');
       proc.kill('SIGKILL');

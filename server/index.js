@@ -18,7 +18,7 @@ import emailCampaignsRouter from './routes/emailCampaigns.js';
 import gmapsRouter from './routes/gmaps.js';
 import projectsRouter from './routes/projects.js';
 import { resolveProject, canAccessProject } from './middleware/project.js';
-import { adoptLegacyJobs } from './gmaps/jobs.js';
+import { adoptLegacyJobs, resumePendingJobs } from './gmaps/jobs.js';
 import { startWorker, stopWorker } from './worker/index.js';
 import { initClient, getStatus, onStatusChange, destroyClient, destroyAllClients, logoutClient, migrateLegacyAuth } from './whatsapp.js';
 
@@ -430,6 +430,7 @@ server.listen(PORT, HOST, () => {
   // Resume any pending broadcast jobs (per project, lazily)
   setTimeout(() => {
     try { resumeAllProjectJobs(); } catch {}
+    resumePendingJobs().catch(() => {});
   }, 3000);
 
   // Background job queue (reminders, email, sequences…). WORKER=off disables it, e.g. for a second instance.

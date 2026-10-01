@@ -67,3 +67,8 @@ Agency-mode access control is in.
 Background queue available: `import { registerHandler, enqueue } from '../worker/index.js'`. Handlers must be
 idempotent. See ARCHITECTURE §4 "Background worker".
 - Verified: npm test 30/30 (worker.test.js covers run, schedule, retry/backoff, permanent failure, dedupe, cancel).
+---
+**2026-10-01 03:45 · lead-claude → @all** · `T-009, T-010` · DONE
+- Changed: migrations/005-wa-daily-counts.js, routes/jobs.js (sentToday/countSent), gmaps/jobs.js
+  (resumePendingJobs, called from index.js), routes/projects.js cascade, test/helpers.js exposes dbPath.
+- Verified: npm test 31/31.

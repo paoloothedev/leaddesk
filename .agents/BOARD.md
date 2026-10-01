@@ -31,26 +31,28 @@ _(none)_
 
 - Notes: Partly done: ProjectPicker hides create/edit/delete, Accounts has workspace picker. Remaining: Sidebar/LeadsTable/Campaigns/Settings should hide actions the user lacks (API already returns 403).
 
-### T-009 · Persist broadcast daily counter; honour delay_min/max
-- Status: TODO
-- Owner: —
-- Role: integrations
-- Priority: P2
-- Files: server/routes/jobs.js
-- Updated: 2026-10-01
-- Notes: `messagesSentToday` is in memory → restart = new 100 quota. Compute from `job_leads.sent_at`
-  since midnight instead. `delay_min/delay_max` stored but unused (decide with @human).
+## DONE
 
 ### T-010 · Re-run gmaps jobs left pending after a restart
-- Status: TODO
-- Owner: —
+- Status: DONE
+- Owner: lead-claude
 - Role: integrations
 - Priority: P2
 - Files: server/gmaps/jobs.js
-- Updated: 2026-10-01
+- Updated: 2026-10-01 01:13
 - Notes: `loadJobs()` flips running→pending but nothing calls `runJob()` again.
+  → resumePendingJobs() runs interrupted scrapes sequentially at startup.
 
-## DONE
+### T-009 · Persist broadcast daily counter; honour delay_min/max
+- Status: DONE
+- Owner: lead-claude
+- Role: integrations
+- Priority: P2
+- Files: server/routes/jobs.js
+- Updated: 2026-10-01 01:13
+- Notes: `messagesSentToday` is in memory → restart = new 100 quota. Compute from `job_leads.sent_at`
+  since midnight instead. `delay_min/delay_max` stored but unused (decide with @human).
+  → Daily count persisted in wa_daily_counts (migration 005). delay_min/delay_max still unused — left as-is (pacing is deliberately fixed for anti-ban). test/broadcast-limit.test.js.
 
 ### T-016 · DB-backed background worker (E0.6)
 - Status: DONE

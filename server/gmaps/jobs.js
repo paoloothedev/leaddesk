@@ -155,6 +155,16 @@ function adoptLegacyJobs(defaultProjectId) {
   if (changed) { saveJobs(); console.log(`[gmaps] Assigned ${changed} legacy jobs to ${defaultProjectId}`); }
 }
 
-export { createJob, getJob, listJobs, deleteJob, adoptLegacyJobs };
+// Jobs that were running/pending when the server stopped are resumed one at a time (each opens a browser).
+async function resumePendingJobs() {
+  const pending = Array.from(jobs.values()).filter(j => j.status === 'pending').sort((a, b) => a.createdAt - b.createdAt);
+  if (!pending.length) return;
+  console.log(`[gmaps] Resuming ${pending.length} interrupted jobs`);
+  for (const job of pending) {
+    try { await runJob(job.id); } catch (err) { console.error(`[gmaps] Resume of ${job.id} failed: ${err.message}`); }
+  }
+}
+
+export { createJob, getJob, listJobs, deleteJob, adoptLegacyJobs, resumePendingJobs };
 
 loadJobs();
