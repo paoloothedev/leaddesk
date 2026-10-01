@@ -29,14 +29,14 @@ router.post('/scrape', (req, res) => {
     lang: lang || 'en',
     geo: geo || '',
     zoom: Math.min(Math.max(parseInt(zoom) || 0, 0), 21),
-  });
+  }, req.project.id);
 
-  logAudit('gmaps_scrape', 'gmaps_job', job.id, job.name, { by: req.user?.id, queries: queryList, geo, zoom });
+  logAudit('gmaps_scrape', 'gmaps_job', job.id, job.name, { by: req.user?.id, queries: queryList, geo, zoom }, req.project.id);
   res.json({ job_id: job.id, status: job.status });
 });
 
 router.get('/jobs', (req, res) => {
-  const allJobs = listJobs().map(j => ({
+  const allJobs = listJobs(req.project.id).map(j => ({
     id: j.id,
     name: j.name,
     queries: j.queries,
@@ -55,7 +55,7 @@ router.get('/jobs', (req, res) => {
 });
 
 router.get('/jobs/:id', (req, res) => {
-  const job = getJob(req.params.id);
+  const job = getJob(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
 
   res.json({
@@ -77,13 +77,13 @@ router.get('/jobs/:id', (req, res) => {
 });
 
 router.delete('/jobs/:id', (req, res) => {
-  const ok = deleteJob(req.params.id);
+  const ok = deleteJob(req.params.id, req.project.id);
   if (!ok) return res.status(404).json({ error: 'Job not found or still running' });
   res.json({ ok: true });
 });
 
 router.get('/jobs/:id/download', (req, res) => {
-  const job = getJob(req.params.id);
+  const job = getJob(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   if (job.status !== 'completed' || !job.results?.length) return res.status(400).json({ error: 'No results' });
 
@@ -155,13 +155,14 @@ router.get('/jobs/:id/download', (req, res) => {
 });
 
 router.post('/jobs/:id/import', async (req, res) => {
-  const job = getJob(req.params.id);
+  const job = getJob(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   if (job.status !== 'completed') return res.status(400).json({ error: 'Job not completed' });
   if (!job.results?.length) return res.status(400).json({ error: 'No results to import' });
 
   const { skipDupes = true, selectedIndices, checkWhatsApp = false } = req.body;
   const db = getDB();
+  const projectId = req.project.id;
 
   let results = job.results;
   if (Array.isArray(selectedIndices) && selectedIndices.length > 0) {
@@ -169,25 +170,25 @@ router.post('/jobs/:id/import', async (req, res) => {
   }
 
   const settings = {};
-  const rows = db.prepare('SELECT key, value FROM settings').all();
+  const rows = db.prepare('SELECT key, value FROM settings WHERE project_id = ?').all(projectId);
   for (const r of rows) settings[r.key] = r.value;
   const countryCode = settings.country_code || '';
 
-  const stage = db.prepare('SELECT id FROM stages ORDER BY sort_order LIMIT 1').get();
+  const stage = db.prepare('SELECT id FROM stages WHERE project_id = ? ORDER BY sort_order LIMIT 1').get(projectId);
   const defaultStage = stage?.id || 'new';
 
   let added = 0, skipped = 0;
   const now = Date.now();
 
-  const insertLead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const insertLead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const insertStageHistory = db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
 
   const insertTag = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
-  const findTag = db.prepare('SELECT id FROM tags WHERE name = ?');
-  const createTag = db.prepare('INSERT INTO tags (id, name, color, created_at) VALUES (?, ?, ?, ?)');
+  const findTag = db.prepare('SELECT id FROM tags WHERE name = ? AND project_id = ?');
+  const createTag = db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)');
 
-  const findLeadByPhone = db.prepare('SELECT id FROM leads WHERE phone = ? AND phone != ""');
-  const findLeadByName = db.prepare('SELECT id FROM leads WHERE name = ?');
+  const findLeadByPhone = db.prepare('SELECT id FROM leads WHERE phone = ? AND phone != "" AND project_id = ?');
+  const findLeadByName = db.prepare('SELECT id FROM leads WHERE name = ? AND project_id = ?');
 
   const importTx = db.transaction(() => {
     for (const r of results) {
@@ -209,8 +210,8 @@ router.post('/jobs/:id/import', async (req, res) => {
       const leadStatus = phoneValid ? 'active' : 'dead';
 
       if (skipDupes) {
-        if (phone && findLeadByPhone.get(phone)) { skipped++; continue; }
-        if (findLeadByName.get(name)) { skipped++; continue; }
+        if (phone && findLeadByPhone.get(phone, projectId)) { skipped++; continue; }
+        if (findLeadByName.get(name, projectId)) { skipped++; continue; }
       }
 
       const leadId = 'lead_' + crypto.randomBytes(8).toString('hex');
@@ -220,26 +221,26 @@ router.post('/jobs/:id/import', async (req, res) => {
         leadId, name, phone, phoneValid ? 1 : 0, email || '',
         facebook, instagram, tiktok, otherLink,
         location, notes, leadStatus, 0, defaultStage, now,
-        leadStatus === 'dead' ? now : null
+        leadStatus === 'dead' ? now : null, projectId
       );
       insertStageHistory.run(leadId, defaultStage, now);
 
       if (r.category) {
-        let tag = findTag.get(r.category);
+        let tag = findTag.get(r.category, projectId);
         if (!tag) {
           const tagId = 'tag_' + crypto.randomBytes(4).toString('hex');
           const colors = ['#3d5a45', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2', '#059669'];
-          createTag.run(tagId, r.category, colors[Math.floor(Math.random() * colors.length)], now);
+          createTag.run(tagId, r.category, colors[Math.floor(Math.random() * colors.length)], now, projectId);
           tag = { id: tagId };
         }
         insertTag.run(leadId, tag.id);
       }
 
       if (isMaybeClosed(r)) {
-        let closedTag = findTag.get('MaybeClosed');
+        let closedTag = findTag.get('MaybeClosed', projectId);
         if (!closedTag) {
           const tagId = 'tag_' + crypto.randomBytes(4).toString('hex');
-          createTag.run(tagId, 'MaybeClosed', '#a13a3a', now);
+          createTag.run(tagId, 'MaybeClosed', '#a13a3a', now, projectId);
           closedTag = { id: tagId };
         }
         insertTag.run(leadId, closedTag.id);
@@ -250,21 +251,21 @@ router.post('/jobs/:id/import', async (req, res) => {
   });
 
   importTx();
-  logAudit('gmaps_import', 'gmaps_job', job.id, `${added} leads`, { by: req.user?.id, skipped });
+  logAudit('gmaps_import', 'gmaps_job', job.id, `${added} leads`, { by: req.user?.id, skipped }, projectId);
 
   let waResults = null;
   if (checkWhatsApp && added > 0) {
     try {
       const toCheck = results.filter(r => r.phone).map(r => normalizePhone(r.phone || '', countryCode)).filter(Boolean);
-      if (toCheck.length > 0 && waCheckPhones && waGetStatus && waGetStatus().ready) {
-        waResults = await waCheckPhones(toCheck);
-        let notWATag = db.prepare('SELECT id FROM tags WHERE name = ?').get('Not WhatsApp');
+      if (toCheck.length > 0 && waCheckPhones && waGetStatus && waGetStatus(projectId).ready) {
+        waResults = await waCheckPhones(projectId, toCheck);
+        let notWATag = db.prepare('SELECT id FROM tags WHERE name = ? AND project_id = ?').get('Not WhatsApp', projectId);
         if (!notWATag) {
           const tagId = 'tag_' + Math.random().toString(36).slice(2, 10);
-          db.prepare('INSERT INTO tags (id, name, color, created_at) VALUES (?, ?, ?, ?)').run(tagId, 'Not WhatsApp', '#a13a3a', Date.now());
+          db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)').run(tagId, 'Not WhatsApp', '#a13a3a', Date.now(), projectId);
           notWATag = { id: tagId };
         }
-        const activeLeads = db.prepare("SELECT id, phone FROM leads WHERE status = 'active'").all();
+        const activeLeads = db.prepare("SELECT id, phone FROM leads WHERE status = 'active' AND project_id = ?").all(projectId);
         for (const r of waResults) {
           if (!r.exists) {
             const match = activeLeads.find(l => l.phone.replace(/\D/g, '') === r.phone);

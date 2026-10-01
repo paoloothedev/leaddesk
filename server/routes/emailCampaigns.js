@@ -8,7 +8,7 @@ router.use(authMiddleware);
 
 router.get('/', requirePermission('campaigns.view'), (req, res) => {
   const db = getDB();
-  const campaigns = db.prepare('SELECT * FROM email_campaigns ORDER BY created_at DESC').all();
+  const campaigns = db.prepare('SELECT * FROM email_campaigns WHERE project_id = ? ORDER BY created_at DESC').all(req.project.id);
   for (const c of campaigns) {
     c.leads = db.prepare(`
       SELECT l.id, l.name, l.email, l.phone FROM leads l
@@ -21,7 +21,7 @@ router.get('/', requirePermission('campaigns.view'), (req, res) => {
 
 router.get('/:id', requirePermission('campaigns.view'), (req, res) => {
   const db = getDB();
-  const c = db.prepare('SELECT * FROM email_campaigns WHERE id = ?').get(req.params.id);
+  const c = db.prepare('SELECT * FROM email_campaigns WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!c) return res.status(404).json({ error: 'Not found' });
   c.leads = db.prepare(`
     SELECT l.id, l.name, l.email, l.phone FROM leads l
@@ -36,15 +36,15 @@ router.post('/', requirePermission('campaigns.edit'), (req, res) => {
   const { name, subject, body } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
   const id = crypto.randomUUID();
-  db.prepare('INSERT INTO email_campaigns (id, name, subject, body, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(id, name, subject || '', body || '', Date.now());
-  logAudit('email_campaign_created', 'email_campaign', id, name, { by: req.user.id });
+  db.prepare('INSERT INTO email_campaigns (id, name, subject, body, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, name, subject || '', body || '', Date.now(), req.project.id);
+  logAudit('email_campaign_created', 'email_campaign', id, name, { by: req.user.id }, req.project.id);
   res.json({ id, name });
 });
 
 router.put('/:id', requirePermission('campaigns.edit'), (req, res) => {
   const db = getDB();
-  const existing = db.prepare('SELECT * FROM email_campaigns WHERE id = ?').get(req.params.id);
+  const existing = db.prepare('SELECT * FROM email_campaigns WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
   const { name, subject, body } = req.body;
   db.prepare('UPDATE email_campaigns SET name=?, subject=?, body=? WHERE id=?')
@@ -54,25 +54,26 @@ router.put('/:id', requirePermission('campaigns.edit'), (req, res) => {
 
 router.delete('/:id', requirePermission('campaigns.delete'), (req, res) => {
   const db = getDB();
-  db.prepare('DELETE FROM email_campaigns WHERE id = ?').run(req.params.id);
+  db.prepare('DELETE FROM email_campaigns WHERE id = ? AND project_id = ?').run(req.params.id, req.project.id);
   res.json({ ok: true });
 });
 
 router.post('/:id/leads', requirePermission('campaigns.edit'), (req, res) => {
   const db = getDB();
+  const projectId = req.project.id;
   const { leadIds, count, force } = req.body;
-  const c = db.prepare('SELECT * FROM email_campaigns WHERE id = ?').get(req.params.id);
+  const c = db.prepare('SELECT * FROM email_campaigns WHERE id = ? AND project_id = ?').get(req.params.id, projectId);
   if (!c) return res.status(404).json({ error: 'Not found' });
 
   let leads;
   if (leadIds?.length) {
-    leads = db.prepare(`SELECT * FROM leads WHERE id IN (${leadIds.map(() => '?').join(',')}) AND email != ''`).all(...leadIds);
+    leads = db.prepare(`SELECT * FROM leads WHERE project_id = ? AND id IN (${leadIds.map(() => '?').join(',')}) AND email != ''`).all(projectId, ...leadIds);
   } else {
     const n = count || 50;
     if (force) {
-      leads = db.prepare("SELECT * FROM leads WHERE status = 'active' AND email != '' AND id NOT IN (SELECT lead_id FROM email_campaign_leads WHERE campaign_id = ?) LIMIT ?").all(req.params.id, n);
+      leads = db.prepare("SELECT * FROM leads WHERE project_id = ? AND status = 'active' AND email != '' AND id NOT IN (SELECT lead_id FROM email_campaign_leads WHERE campaign_id = ?) LIMIT ?").all(projectId, req.params.id, n);
     } else {
-      leads = db.prepare("SELECT * FROM leads WHERE status = 'active' AND verified = 1 AND email != '' AND id NOT IN (SELECT lead_id FROM email_campaign_leads) AND id NOT IN (SELECT lead_id FROM email_campaign_leads WHERE campaign_id = ?) LIMIT ?").all(req.params.id, n);
+      leads = db.prepare("SELECT * FROM leads WHERE project_id = ? AND status = 'active' AND verified = 1 AND email != '' AND id NOT IN (SELECT lead_id FROM email_campaign_leads) AND id NOT IN (SELECT lead_id FROM email_campaign_leads WHERE campaign_id = ?) LIMIT ?").all(projectId, req.params.id, n);
     }
   }
 

@@ -1,9 +1,20 @@
 const API = '/api';
 
+// Current project id — set by ProjectShell when inside /p/:projectId/*
+let currentProjectId = null;
+export function setCurrentProjectId(id) { currentProjectId = id || null; }
+export function getCurrentProjectId() { return currentProjectId; }
+
+function projectHeaders(extra = {}) {
+  const h = { ...extra };
+  if (currentProjectId) h['X-Project-Id'] = currentProjectId;
+  return h;
+}
+
 async function request(path, options = {}) {
   const res = await fetch(API + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: projectHeaders({ 'Content-Type': 'application/json', ...options.headers }),
     ...options,
   });
   if (!res.ok) {
@@ -13,10 +24,26 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+// ── Projects (no project header required) ───────────────────────
+export function getProjects() {
+  return request('/projects');
+}
+export function createProject(data) {
+  return request('/projects', { method: 'POST', body: JSON.stringify(data) });
+}
+export function updateProject(id, data) {
+  return request('/projects/' + id, { method: 'PUT', body: JSON.stringify(data) });
+}
+export function deleteProject(id) {
+  return request('/projects/' + id, { method: 'DELETE' });
+}
+
+// ── Stats ───────────────────────────────────────────────────────
 export function getStats() {
   return request('/stats');
 }
 
+// ── Leads ───────────────────────────────────────────────────────
 export function getLeads(params = {}) {
   const qs = new URLSearchParams(params).toString();
   return request('/leads' + (qs ? '?' + qs : ''));
@@ -45,220 +72,191 @@ export function bulkAction(ids, action, stageId, tagId) {
 export function importPreview(file) {
   const formData = new FormData();
   formData.append('file', file);
-  return fetch(API + '/leads/import/preview', { method: 'POST', body: formData, credentials: 'include' }).then(r => r.json());
+  const headers = {};
+  if (currentProjectId) headers['X-Project-Id'] = currentProjectId;
+  return fetch(API + '/leads/import/preview', { method: 'POST', body: formData, credentials: 'include', headers }).then(r => r.json());
 }
 
 export function importConfirm(rows, skipDupes, updateMode, checkWhatsApp, filename) {
   return request('/leads/import/confirm', { method: 'POST', body: JSON.stringify({ rows, skipDupes, updateMode, checkWhatsApp, filename }) });
 }
 
+// ── Stages ──────────────────────────────────────────────────────
 export function getStages() {
   return request('/stages');
 }
-
 export function createStage(data) {
   return request('/stages', { method: 'POST', body: JSON.stringify(data) });
 }
-
 export function updateStage(id, data) {
   return request('/stages/' + id, { method: 'PUT', body: JSON.stringify(data) });
 }
-
 export function deleteStage(id) {
   return request('/stages/' + id, { method: 'DELETE' });
 }
-
 export function reorderStages(orderedIds) {
   return request('/stages/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
 }
 
+// ── Campaigns ───────────────────────────────────────────────────
 export function getCampaigns() {
   return request('/campaigns');
 }
-
 export function createCampaign(data) {
   return request('/campaigns', { method: 'POST', body: JSON.stringify(data) });
 }
-
 export function deleteCampaign(id) {
   return request('/campaigns/' + id, { method: 'DELETE' });
 }
-
 export function removeLeadFromCampaign(id, leadId) {
   return request('/campaigns/' + id + '/leads/' + leadId, { method: 'DELETE' });
 }
-
 export function addLeadsToCampaign(id, leadIds, count, force) {
   const body = leadIds ? { leadIds, force } : { count, force };
   return request('/campaigns/' + id + '/leads', { method: 'POST', body: JSON.stringify(body) });
 }
 
+// ── Export / Import backup ──────────────────────────────────────
 export function exportBackup() {
   return request('/export');
 }
-
 export function exportCSV() {
-  window.open('/api/export/csv', '_blank');
+  const q = currentProjectId ? '?project=' + encodeURIComponent(currentProjectId) : '';
+  window.open('/api/export/csv' + q, '_blank');
 }
-
 export function importBackup(data) {
   return request('/import/backup', { method: 'POST', body: JSON.stringify(data) });
 }
 
+// ── Tags ────────────────────────────────────────────────────────
 export function getTags() {
   return request('/tags');
 }
-
 export function createTag(data) {
   return request('/tags', { method: 'POST', body: JSON.stringify(data) });
 }
-
 export function updateTag(id, data) {
   return request('/tags/' + id, { method: 'PUT', body: JSON.stringify(data) });
 }
-
 export function deleteTag(id) {
   return request('/tags/' + id, { method: 'DELETE' });
 }
 
-// Broadcast jobs
+// ── Broadcast jobs ──────────────────────────────────────────────
 export function createJob(data) {
   return request('/jobs', { method: 'POST', body: JSON.stringify(data) });
 }
-
 export function getJobs() {
   return request('/jobs');
 }
-
 export function getDailyStatus() {
   return request('/jobs/daily-status');
 }
-
 export function getJob(id) {
   return request('/jobs/' + id);
 }
-
 export function pauseJob(id) {
   return request('/jobs/' + id + '/pause', { method: 'POST' });
 }
-
 export function resumeJob(id) {
   return request('/jobs/' + id + '/resume', { method: 'POST' });
 }
-
 export function stopJob(id) {
   return request('/jobs/' + id + '/stop', { method: 'POST' });
 }
-
 export function deleteJob(id) {
   return request('/jobs/' + id, { method: 'DELETE' });
 }
 
-// Message templates
+// ── Message templates ───────────────────────────────────────────
 export function getTemplates() {
   return request('/templates');
 }
-
 export function createTemplate(data) {
   return request('/templates', { method: 'POST', body: JSON.stringify(data) });
 }
-
 export function updateTemplate(id, data) {
   return request('/templates/' + id, { method: 'PUT', body: JSON.stringify(data) });
 }
-
 export function deleteTemplate(id) {
   return request('/templates/' + id, { method: 'DELETE' });
 }
 
+// ── Logs ────────────────────────────────────────────────────────
 export function getImportLogs() {
   return request('/import-logs');
 }
-
 export function getAuditLog(limit) {
   return request('/audit-log' + (limit ? '?limit=' + limit : ''));
 }
 
-// Settings
+// ── Settings ────────────────────────────────────────────────────
 export function getSettings() {
   return request('/settings');
 }
-
 export function saveSetting(key, value) {
   return request('/settings', { method: 'PUT', body: JSON.stringify({ key, value }) });
 }
 
-// Clients
+// ── Clients ─────────────────────────────────────────────────────
 export function getClients(params = {}) {
   const qs = new URLSearchParams(params).toString();
   return request('/clients' + (qs ? '?' + qs : ''));
 }
-
 export function getClient(id) {
   return request('/clients/' + id);
 }
-
 export function createClient(data) {
   return request('/clients', { method: 'POST', body: JSON.stringify(data) });
 }
-
 export function updateClient(id, data) {
   return request('/clients/' + id, { method: 'PUT', body: JSON.stringify(data) });
 }
-
 export function deleteClient(id) {
   return request('/clients/' + id, { method: 'DELETE' });
 }
-
 export function addClientActivity(id, action, details) {
   return request('/clients/' + id + '/activity', { method: 'POST', body: JSON.stringify({ action, details }) });
 }
 
-// Email Campaigns
+// ── Email Campaigns ─────────────────────────────────────────────
 export function getEmailCampaigns() {
   return request('/email-campaigns');
 }
-
 export function createEmailCampaign(data) {
   return request('/email-campaigns', { method: 'POST', body: JSON.stringify(data) });
 }
-
 export function updateEmailCampaign(id, data) {
   return request('/email-campaigns/' + id, { method: 'PUT', body: JSON.stringify(data) });
 }
-
 export function deleteEmailCampaign(id) {
   return request('/email-campaigns/' + id, { method: 'DELETE' });
 }
-
 export function addLeadsToEmailCampaign(id, leadIds, count, force) {
   const body = leadIds ? { leadIds, force } : { count, force };
   return request('/email-campaigns/' + id + '/leads', { method: 'POST', body: JSON.stringify(body) });
 }
 
-// Google Maps Scraper
+// ── Google Maps Scraper ─────────────────────────────────────────
 export function scrapeGmaps(data) {
   return request('/gmaps/scrape', { method: 'POST', body: JSON.stringify(data) });
 }
-
 export function getGmapsJobs() {
   return request('/gmaps/jobs');
 }
-
 export function getGmapsJob(id) {
   return request('/gmaps/jobs/' + id);
 }
-
 export function deleteGmapsJob(id) {
   return request('/gmaps/jobs/' + id, { method: 'DELETE' });
 }
-
 export function importGmapsJob(id, options = {}) {
   return request('/gmaps/jobs/' + id + '/import', { method: 'POST', body: JSON.stringify(options) });
 }
-
 export async function downloadGmapsCSV(id) {
-  const res = await fetch(`/api/gmaps/jobs/${id}/download`, { credentials: 'include' });
+  const headers = {};
+  if (currentProjectId) headers['X-Project-Id'] = currentProjectId;
+  const res = await fetch(`/api/gmaps/jobs/${id}/download`, { credentials: 'include', headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Download failed' }));
     throw new Error(err.error || 'Download failed');

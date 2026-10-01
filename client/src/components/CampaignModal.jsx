@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { X, Copy, Plus, Trash, CaretRight, PaperPlaneTilt } from '@phosphor-icons/react'
+import { X, Copy, Plus, Trash, CaretRight, PaperPlaneTilt, UserPlus, MagnifyingGlass } from '@phosphor-icons/react'
 import { getCampaigns, deleteCampaign, addLeadsToCampaign, removeLeadFromCampaign, bulkAction } from '../api'
 import WhatsAppSend from './WhatsAppSend'
 
@@ -8,6 +8,7 @@ export default function CampaignModal({ campId, stages, close, showToast, refres
   const [campaign, setCampaign] = useState(null)
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
 
   const loadCampaign = useCallback(async () => {
     if (!campId) return
@@ -93,9 +94,29 @@ export default function CampaignModal({ campId, stages, close, showToast, refres
     } catch { showToast('Failed to convert leads.', true) }
   }
 
+  const handleConvertLead = async (leadId, leadName) => {
+    try {
+      await bulkAction([leadId], 'convert')
+      showToast(`"${leadName}" moved to CRM.`)
+      loadCampaign()
+      refresh()
+    } catch { showToast('Failed to convert lead.', true) }
+  }
+
   const getStage = (id) => stages.find(s => s.id === id)
 
   if (loading || !campaign) return null
+
+  const q = search.toLowerCase().trim()
+  const filteredLeads = q
+    ? (campaign.leads || []).filter(l =>
+        (l.name || '').toLowerCase().includes(q) ||
+        (l.phone || '').includes(q) ||
+        (l.notes || '').toLowerCase().includes(q) ||
+        (l.tags || []).some(t => (t.name || '').toLowerCase().includes(q)) ||
+        (getStage(l.stage_id)?.name || '').toLowerCase().includes(q)
+      )
+    : (campaign.leads || [])
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm modal-overlay" onClick={close}>
@@ -137,6 +158,11 @@ export default function CampaignModal({ campId, stages, close, showToast, refres
               Delete campaign
             </button>
           </div>
+          <div className="mb-3 relative">
+            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leads..."
+              className="w-full h-9 pl-9 pr-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" />
+          </div>
           <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
             <table className="w-full text-sm">
               <thead>
@@ -150,7 +176,7 @@ export default function CampaignModal({ campId, stages, close, showToast, refres
                 </tr>
               </thead>
               <tbody>
-                {(campaign.leads || []).map(l => {
+                {filteredLeads.map(l => {
                   const stage = getStage(l.stage_id)
                   return (
                     <tr key={l.id} className="border-b border-zinc-50 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
@@ -173,6 +199,9 @@ export default function CampaignModal({ campId, stages, close, showToast, refres
                         <div className="flex gap-1">
                           <button onClick={() => openLeadModal(l.id)} className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.95]">
                             <CaretRight size={12} />
+                          </button>
+                          <button onClick={() => handleConvertLead(l.id, l.name)} title="Move to CRM" className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium border border-blue-200 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 transition-colors active:scale-[0.95]">
+                            <UserPlus size={12} />
                           </button>
                           <button onClick={() => handleRemoveLead(l.id, l.name)} className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium border border-red-200 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.95]">
                             <Trash size={12} />

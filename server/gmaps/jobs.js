@@ -36,13 +36,14 @@ function saveJobs() {
   }
 }
 
-function createJob(name, queries, options = {}) {
+function createJob(name, queries, options = {}, projectId = null) {
   const id = crypto.randomBytes(8).toString('hex');
   const job = {
     id,
     name: name || 'Untitled Scrape',
     queries: Array.isArray(queries) ? queries : [queries],
     options,
+    projectId,
     status: 'pending',
     results: [],
     totalFound: 0,
@@ -120,17 +121,23 @@ async function runJob(id) {
   console.log(`[gmaps] Job ${id}: completed with ${allResults.length} total unique results`);
 }
 
-function getJob(id) {
-  return jobs.get(id) || null;
+function getJob(id, projectId = null) {
+  const job = jobs.get(id) || null;
+  if (!job) return null;
+  if (projectId && job.projectId && job.projectId !== projectId) return null;
+  return job;
 }
 
-function listJobs() {
-  return Array.from(jobs.values()).sort((a, b) => b.createdAt - a.createdAt);
+function listJobs(projectId = null) {
+  let list = Array.from(jobs.values());
+  if (projectId) list = list.filter(j => !j.projectId || j.projectId === projectId);
+  return list.sort((a, b) => b.createdAt - a.createdAt);
 }
 
-function deleteJob(id) {
+function deleteJob(id, projectId = null) {
   const job = jobs.get(id);
   if (!job) return false;
+  if (projectId && job.projectId && job.projectId !== projectId) return false;
   if (job.status === 'running') return false;
   jobs.delete(id);
   saveJobs();

@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { getDB, logAudit } from '../db.js';
+import { getDB, logAudit, DB_PATH } from '../db.js';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', 'leaddesk.db');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -23,10 +23,11 @@ try {
 // List leads
 router.get('/', (req, res) => {
   const db = getDB();
+  const projectId = req.project.id;
   const { search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder } = req.query;
 
-  let sql = 'SELECT * FROM leads WHERE 1=1';
-  const params = [];
+  let sql = 'SELECT * FROM leads WHERE project_id = ?';
+  const params = [projectId];
 
   if (status) {
     sql += ' AND status = ?'; params.push(status);
@@ -113,7 +114,7 @@ router.get('/', (req, res) => {
 // Get single lead
 router.get('/:id', (req, res) => {
   const db = getDB();
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id);
+  const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!lead) return res.status(404).json({ error: 'Not found' });
   lead.verified = !!lead.verified;
   lead.phone_valid = !!lead.phone_valid;
@@ -132,6 +133,7 @@ router.get('/:id', (req, res) => {
 // Create lead
 router.post('/', (req, res) => {
   const db = getDB();
+  const projectId = req.project.id;
   const { id, name, phone, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, tag_ids } = req.body;
 
   const leadId = id || 'lead_' + Math.random().toString(36).slice(2, 10);
@@ -139,8 +141,8 @@ router.post('/', (req, res) => {
   const phoneValid = isValidPhone(phone) ? 1 : 0;
   const isDead = !phoneValid || !phone;
 
-  db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    leadId, name || '(unnamed)', phone || '', phoneValid, email || '', facebook || '', instagram || '', tiktok || '', link || '', location || '', notes || '', isDead ? 'dead' : (status || 'active'), verified ? 1 : 0, stage_id, now, isDead ? now : (status === 'dead' ? now : null)
+  db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    leadId, name || '(unnamed)', phone || '', phoneValid, email || '', facebook || '', instagram || '', tiktok || '', link || '', location || '', notes || '', isDead ? 'dead' : (status || 'active'), verified ? 1 : 0, stage_id, now, isDead ? now : (status === 'dead' ? now : null), projectId
   );
 
   db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)').run(leadId, stage_id, now);
@@ -150,7 +152,7 @@ router.post('/', (req, res) => {
     for (const tid of tag_ids) insertTag.run(leadId, tid);
   }
 
-  logAudit('create', 'lead', leadId, name || '(unnamed)', { phone, phoneValid, stage_id });
+  logAudit('create', 'lead', leadId, name || '(unnamed)', { phone, phoneValid, stage_id }, projectId);
 
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId);
   lead.verified = !!lead.verified;
@@ -164,7 +166,7 @@ router.post('/', (req, res) => {
 // Update lead
 router.put('/:id', (req, res) => {
   const db = getDB();
-  const existing = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id);
+  const existing = db.prepare('SELECT * FROM leads WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
 
   const { name, phone, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, tag_ids } = req.body;
@@ -193,7 +195,7 @@ router.put('/:id', (req, res) => {
     for (const tid of tag_ids) insertTag.run(req.params.id, tid);
   }
 
-  logAudit('edit', 'lead', req.params.id, existing.name, { changes: req.body });
+  logAudit('edit', 'lead', req.params.id, existing.name, { changes: req.body }, req.project.id);
 
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id);
   lead.verified = !!lead.verified;
@@ -207,51 +209,59 @@ router.put('/:id', (req, res) => {
 // Delete lead
 router.delete('/:id', (req, res) => {
   const db = getDB();
-  const existing = db.prepare('SELECT id, name FROM leads WHERE id = ?').get(req.params.id);
-  db.prepare('DELETE FROM leads WHERE id = ?').run(req.params.id);
-  logAudit('delete', 'lead', req.params.id, existing?.name || 'unknown');
+  const existing = db.prepare('SELECT id, name FROM leads WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
+  db.prepare('DELETE FROM leads WHERE id = ? AND project_id = ?').run(req.params.id, req.project.id);
+  logAudit('delete', 'lead', req.params.id, existing?.name || 'unknown', {}, req.project.id);
   res.json({ ok: true });
 });
 
 // Bulk actions
 router.post('/bulk', (req, res) => {
   const db = getDB();
+  const projectId = req.project.id;
   const { ids, action, stageId, tagId } = req.body;
   if (!ids || !ids.length) return res.status(400).json({ error: 'No IDs' });
   const now = Date.now();
 
+  // Only allow acting on leads in this project
+  const placeholders = ids.map(() => '?').join(',');
+  const owned = db.prepare(`SELECT id FROM leads WHERE project_id = ? AND id IN (${placeholders})`).all(projectId, ...ids);
+  const ownedIds = owned.map(r => r.id);
+  if (!ownedIds.length) return res.status(404).json({ error: 'No matching leads' });
+  const ownedPh = ownedIds.map(() => '?').join(',');
+
   if (action === 'verify') {
-    db.prepare(`UPDATE leads SET verified = 1 WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids);
+    db.prepare(`UPDATE leads SET verified = 1 WHERE id IN (${ownedPh})`).run(...ownedIds);
   } else if (action === 'dead') {
-    db.prepare(`UPDATE leads SET status = 'dead', dead_at = ? WHERE id IN (${ids.map(() => '?').join(',')})`).run(now, ...ids);
+    db.prepare(`UPDATE leads SET status = 'dead', dead_at = ? WHERE id IN (${ownedPh})`).run(now, ...ownedIds);
   } else if (action === 'stage' && stageId) {
-    db.prepare(`UPDATE leads SET stage_id = ? WHERE id IN (${ids.map(() => '?').join(',')})`).run(stageId, ...ids);
+    db.prepare(`UPDATE leads SET stage_id = ? WHERE id IN (${ownedPh})`).run(stageId, ...ownedIds);
     const insert = db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
-    for (const id of ids) insert.run(id, stageId, now);
+    for (const id of ownedIds) insert.run(id, stageId, now);
   } else if (action === 'tag' && tagId) {
     const insert = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
-    for (const id of ids) insert.run(id, tagId);
+    for (const id of ownedIds) insert.run(id, tagId);
   } else if (action === 'untag' && tagId) {
     const del = db.prepare('DELETE FROM lead_tags WHERE lead_id = ? AND tag_id = ?');
-    for (const id of ids) del.run(id, tagId);
+    for (const id of ownedIds) del.run(id, tagId);
   } else if (action === 'delete') {
-    db.prepare(`DELETE FROM leads WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids);
+    db.prepare(`DELETE FROM leads WHERE id IN (${ownedPh})`).run(...ownedIds);
   } else if (action === 'convert') {
-    const insertClient = db.prepare(`INSERT OR IGNORE INTO clients (id, lead_id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertClient = db.prepare(`INSERT OR IGNORE INTO clients (id, lead_id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, source, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
-    for (const id of ids) {
+    for (const id of ownedIds) {
       const l = getLead.get(id);
       if (l) {
-        insertClient.run(crypto.randomUUID(), l.id, l.name, l.phone, l.phone_valid, l.email, l.facebook, l.instagram, l.tiktok, l.link, l.location, l.notes, 'active', 'lead', Date.now());
+        insertClient.run(crypto.randomUUID(), l.id, l.name, l.phone, l.phone_valid, l.email, l.facebook, l.instagram, l.tiktok, l.link, l.location, l.notes, 'active', 'lead', Date.now(), projectId);
       }
     }
   }
 
-  logAudit('bulk', 'lead', ids.join(','), `${action} (${ids.length} leads)`, { action, stageId, tagId });
+  logAudit('bulk', 'lead', ownedIds.join(','), `${action} (${ownedIds.length} leads)`, { action, stageId, tagId }, projectId);
   res.json({ ok: true });
 });
 
-// Import preview (CSV upload) — uses csv-parse/sync for robust parsing
+// Import preview (CSV upload)
 router.post('/import/preview', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const text = req.file.buffer.toString('utf-8');
@@ -262,16 +272,17 @@ router.post('/import/preview', upload.single('file'), (req, res) => {
 // Import confirm — with update mode
 router.post('/import/confirm', async (req, res) => {
   const db = getDB();
+  const projectId = req.project.id;
   const { rows, skipDupes, updateMode, checkWhatsApp, filename } = req.body;
   let added = 0, skipped = 0, updated = 0;
   const now = Date.now();
-  const firstStage = db.prepare('SELECT id FROM stages ORDER BY sort_order LIMIT 1').get();
+  const firstStage = db.prepare('SELECT id FROM stages WHERE project_id = ? ORDER BY sort_order LIMIT 1').get(projectId);
 
   // Read country code setting for phone normalization
-  const ccSetting = db.prepare("SELECT value FROM settings WHERE key = 'country_code'").get();
+  const ccSetting = db.prepare("SELECT value FROM settings WHERE project_id = ? AND key = 'country_code'").get(projectId);
   const countryCode = ccSetting ? ccSetting.value : '';
 
-  // Normalize phone numbers (strip spaces, apply country code)
+  // Normalize phone numbers
   for (const row of rows) {
     if (row.phone) row.phone = normalizePhone(row.phone, countryCode);
   }
@@ -280,22 +291,21 @@ router.post('/import/confirm', async (req, res) => {
   try {
     const backupPath = DB_PATH + '.backup.' + now;
     fs.copyFileSync(DB_PATH, backupPath);
-  } catch {} // Non-critical, proceed anyway
+  } catch {}
 
-  const insertActive = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'active', 0, ?, ?)`);
-  const insertDead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'dead', 0, ?, ?, ?)`);
+  const insertActive = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'active', 0, ?, ?, ?)`);
+  const insertDead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'dead', 0, ?, ?, ?, ?)`);
   const insertHistory = db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
   const updateByPhone = db.prepare(`UPDATE leads SET name=?, phone_valid=?, email=?, facebook=?, instagram=?, tiktok=?, link=?, location=? WHERE id=?`);
-  const findDupe = db.prepare('SELECT id FROM leads WHERE LOWER(name) = ? AND phone != \'\' AND phone = ?');
-  const findDupeNoPhone = db.prepare('SELECT id FROM leads WHERE LOWER(name) = ? AND (phone = \'\' OR phone IS NULL)');
-  const findPhone = db.prepare('SELECT id FROM leads WHERE phone != \'\' AND phone = ?');
+  const findDupe = db.prepare("SELECT id FROM leads WHERE project_id = ? AND LOWER(name) = ? AND phone != '' AND phone = ?");
+  const findDupeNoPhone = db.prepare("SELECT id FROM leads WHERE project_id = ? AND LOWER(name) = ? AND (phone = '' OR phone IS NULL)");
+  const findPhone = db.prepare("SELECT id FROM leads WHERE project_id = ? AND phone != '' AND phone = ?");
 
   const txn = db.transaction(() => {
     const maybeClosedIds = [];
     for (const row of rows) {
-      // Update mode: find by phone and update existing record
       if (updateMode && row.phone) {
-        const existing = findPhone.get(row.phone);
+        const existing = findPhone.get(projectId, row.phone);
         if (existing) {
           updateByPhone.run(row.name, row.phoneValid ? 1 : 0, row.email || '', row.facebook || '', row.instagram || '', row.tiktok || '', row.link || '', row.location || '', existing.id);
           if (row.maybeClosed) maybeClosedIds.push(existing.id);
@@ -304,13 +314,12 @@ router.post('/import/confirm', async (req, res) => {
         }
       }
 
-      // Skip dupes mode: skip if same name+phone exists (handles empty-phone leads too)
       if (skipDupes) {
         let dupe;
         if (row.phone) {
-          dupe = findDupe.get(row.name.toLowerCase(), row.phone);
+          dupe = findDupe.get(projectId, row.name.toLowerCase(), row.phone);
         } else {
-          dupe = findDupeNoPhone.get(row.name.toLowerCase());
+          dupe = findDupeNoPhone.get(projectId, row.name.toLowerCase());
         }
         if (dupe) { skipped++; continue; }
       }
@@ -318,9 +327,9 @@ router.post('/import/confirm', async (req, res) => {
       const id = 'lead_' + Math.random().toString(36).slice(2, 10);
       const isDead = !row.phoneValid || !row.phone;
       if (isDead) {
-        insertDead.run(id, row.name, row.phone, row.phoneValid ? 1 : 0, row.email || '', row.facebook || '', row.instagram || '', row.tiktok || '', row.link || '', row.location || '', firstStage?.id || 's1', now, now);
+        insertDead.run(id, row.name, row.phone, row.phoneValid ? 1 : 0, row.email || '', row.facebook || '', row.instagram || '', row.tiktok || '', row.link || '', row.location || '', firstStage?.id || 's1', now, now, projectId);
       } else {
-        insertActive.run(id, row.name, row.phone, row.phoneValid ? 1 : 0, row.email || '', row.facebook || '', row.instagram || '', row.tiktok || '', row.link || '', row.location || '', firstStage?.id || 's1', now);
+        insertActive.run(id, row.name, row.phone, row.phoneValid ? 1 : 0, row.email || '', row.facebook || '', row.instagram || '', row.tiktok || '', row.link || '', row.location || '', firstStage?.id || 's1', now, projectId);
       }
       insertHistory.run(id, firstStage?.id || 's1', now);
       if (row.maybeClosed) maybeClosedIds.push(id);
@@ -332,10 +341,10 @@ router.post('/import/confirm', async (req, res) => {
 
   // Tag MaybeClosed leads
   if (maybeClosedIds.length > 0) {
-    let maybeClosedTag = db.prepare('SELECT id FROM tags WHERE name = ?').get('MaybeClosed');
+    let maybeClosedTag = db.prepare('SELECT id FROM tags WHERE name = ? AND project_id = ?').get('MaybeClosed', projectId);
     if (!maybeClosedTag) {
       const tagId = 'tag_' + Math.random().toString(36).slice(2, 10);
-      db.prepare('INSERT INTO tags (id, name, color, created_at) VALUES (?, ?, ?, ?)').run(tagId, 'MaybeClosed', '#8B4513', Date.now());
+      db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)').run(tagId, 'MaybeClosed', '#8B4513', Date.now(), projectId);
       maybeClosedTag = { id: tagId };
     }
     const assignTag = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
@@ -346,20 +355,17 @@ router.post('/import/confirm', async (req, res) => {
   let waResults = null;
   if (checkWhatsApp && added > 0) {
     try {
-      // Get phones of newly added leads that have valid phones
       const toCheck = rows.filter(r => r.phone && r.phoneValid).map(r => r.phone);
       if (toCheck.length > 0) {
-        if (waCheckPhones && waGetStatus && waGetStatus().ready) {
-          waResults = await waCheckPhones(toCheck);
-          // Find or create "Not WhatsApp" tag
-          let notWATag = db.prepare('SELECT id FROM tags WHERE name = ?').get('Not WhatsApp');
+        if (waCheckPhones && waGetStatus && waGetStatus(projectId).ready) {
+          waResults = await waCheckPhones(projectId, toCheck);
+          let notWATag = db.prepare('SELECT id FROM tags WHERE name = ? AND project_id = ?').get('Not WhatsApp', projectId);
           if (!notWATag) {
             const tagId = 'tag_' + Math.random().toString(36).slice(2, 10);
-            db.prepare('INSERT INTO tags (id, name, color, created_at) VALUES (?, ?, ?, ?)').run(tagId, 'Not WhatsApp', '#a13a3a', Date.now());
+            db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)').run(tagId, 'Not WhatsApp', '#a13a3a', Date.now(), projectId);
             notWATag = { id: tagId };
           }
-          // Find leads by phone (strip formatting from DB phone to match) and assign tag
-          const activeLeads = db.prepare("SELECT id, phone FROM leads WHERE status = 'active'").all();
+          const activeLeads = db.prepare("SELECT id, phone FROM leads WHERE status = 'active' AND project_id = ?").all(projectId);
           for (const r of waResults) {
             if (!r.exists) {
               const match = activeLeads.find(l => l.phone.replace(/\D/g, '') === r.phone);
@@ -370,20 +376,19 @@ router.post('/import/confirm', async (req, res) => {
           }
         }
       }
-    } catch {} // Non-critical
+    } catch {}
   }
 
   // Log import
   const importId = 'imp_' + Math.random().toString(36).slice(2, 10);
-  db.prepare('INSERT INTO import_logs (id, filename, rows_total, added, skipped, updated, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(importId, filename || '', rows.length, added, skipped, updated, JSON.stringify({ waResults }), now);
-  logAudit('import', 'import', importId, filename || 'unknown.csv', { added, skipped, updated, rows: rows.length });
+  db.prepare('INSERT INTO import_logs (id, filename, rows_total, added, skipped, updated, details, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(importId, filename || '', rows.length, added, skipped, updated, JSON.stringify({ waResults }), now, projectId);
+  logAudit('import', 'import', importId, filename || 'unknown.csv', { added, skipped, updated, rows: rows.length }, projectId);
 
   res.json({ added, skipped, updated, waResults });
 });
 
 function parseCSV(text) {
-  // Pre-process: remove lines with unclosed quotes (some rows in Google Maps CSVs are truncated)
   const lines = text.split('\n');
   const cleanLines = [lines[0]];
   for (let i = 1; i < lines.length; i++) {
@@ -409,7 +414,7 @@ function parseCSV(text) {
   }
   if (!raw.length) return [];
 
-    const data = [];
+  const data = [];
   for (const row of raw) {
     const name = row.title || row.name || row.Name || '(unnamed)';
     const phone = row.phone || row.Phone || '';
@@ -444,7 +449,6 @@ function parseCSV(text) {
 }
 
 function getMaybeClosed(userReviewsRaw, openHoursRaw, popularTimesRaw, statusRaw) {
-  // 1. Newest review older than 9 months
   if (userReviewsRaw && userReviewsRaw !== 'null' && userReviewsRaw !== '[]') {
     try {
       const reviews = JSON.parse(userReviewsRaw);
@@ -461,10 +465,8 @@ function getMaybeClosed(userReviewsRaw, openHoursRaw, popularTimesRaw, statusRaw
     } catch {}
   }
 
-  // 2. Both open_hours and popular_times empty
   if ((!openHoursRaw || openHoursRaw === '{}') && (!popularTimesRaw || popularTimesRaw === '{}')) return true;
 
-  // 3. All days in open_hours explicitly say "Closed"
   if (openHoursRaw && openHoursRaw !== '{}') {
     try {
       const oh = JSON.parse(openHoursRaw);
@@ -472,7 +474,6 @@ function getMaybeClosed(userReviewsRaw, openHoursRaw, popularTimesRaw, statusRaw
     } catch {}
   }
 
-  // 4. status column contains "closed"
   if (statusRaw && (String(statusRaw).toLowerCase().includes('closed') || String(statusRaw).toLowerCase().includes('permanently'))) return true;
 
   return false;

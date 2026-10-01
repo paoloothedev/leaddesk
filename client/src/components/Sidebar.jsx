@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import {
   ChartLine, Users, Skull, Megaphone, GearSix, Upload,
-  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo
+  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo, SquaresFour
 } from '@phosphor-icons/react'
 
 const NAV_ITEMS = [
@@ -28,7 +29,14 @@ const itemVariants = {
   visible: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 20 } }
 }
 
-export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu, user, onLogout }) {
+export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu, user, onLogout, project }) {
+  const navigate = useNavigate()
+
+  const goProjects = () => {
+    closeMobileMenu()
+    navigate('/')
+  }
+
   return (
     <>
       {mobileMenuOpen && (
@@ -44,16 +52,38 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
       >
-        <div className={`flex items-center h-14 border-b border-zinc-800 shrink-0 ${sidebarCollapsed ? 'justify-center px-0' : 'px-5'}`}>
-          {sidebarCollapsed ? (
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.2)]" />
+        {/* Project switcher / brand */}
+        <button
+          onClick={goProjects}
+          className={`flex items-center h-14 border-b border-zinc-800 shrink-0 transition-colors hover:bg-zinc-800/50 ${
+            sidebarCollapsed ? 'justify-center px-0' : 'px-5 gap-3'
+          }`}
+          title="All projects"
+        >
+          {project ? (
+            <>
+              <span
+                className="w-6 h-6 rounded-md flex items-center justify-center text-sm shrink-0"
+                style={{ background: (project.color || '#10b981') + '33' }}
+              >
+                {project.icon || '📁'}
+              </span>
+              {!sidebarCollapsed && (
+                <span className="flex flex-col items-start min-w-0">
+                  <span className="font-semibold text-xs text-zinc-100 tracking-tight truncate max-w-[140px]">{project.name}</span>
+                  <span className="text-[9px] text-zinc-500 flex items-center gap-1">
+                    <SquaresFour size={9} /> All projects
+                  </span>
+                </span>
+              )}
+            </>
           ) : (
-            <div className="flex items-center gap-3">
+            <>
               <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.2)]" />
-              <span className="font-semibold text-sm text-zinc-100 tracking-tight">LeadDesk</span>
-            </div>
+              {!sidebarCollapsed && <span className="font-semibold text-sm text-zinc-100 tracking-tight">LeadDesk</span>}
+            </>
           )}
-        </div>
+        </button>
 
         <motion.nav
           variants={containerVariants}

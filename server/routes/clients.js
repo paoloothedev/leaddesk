@@ -8,10 +8,11 @@ router.use(authMiddleware);
 
 router.get('/', requirePermission('leads.view'), (req, res) => {
   const db = getDB();
+  const projectId = req.project.id;
   const { search, status, assigned, tag, sortBy, sortOrder } = req.query;
 
-  let sql = 'SELECT * FROM clients WHERE 1=1';
-  const params = [];
+  let sql = 'SELECT * FROM clients WHERE project_id = ?';
+  const params = [projectId];
 
   if (search) { sql += ' AND (name LIKE ? OR phone LIKE ? OR email LIKE ?)'; const s = `%${search}%`; params.push(s, s, s); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
@@ -30,7 +31,6 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
 
   const clients = db.prepare(sql).all(...params);
 
-  // Attach tags
   const getTags = db.prepare('SELECT t.* FROM tags t INNER JOIN client_tags ct ON ct.tag_id = t.id WHERE ct.client_id = ?');
   for (const c of clients) {
     c.tags = getTags.all(c.id);
@@ -41,7 +41,7 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
 
 router.get('/:id', requirePermission('leads.view'), (req, res) => {
   const db = getDB();
-  const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
+  const client = db.prepare('SELECT * FROM clients WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!client) return res.status(404).json({ error: 'Client not found' });
   client.tags = db.prepare('SELECT t.* FROM tags t INNER JOIN client_tags ct ON ct.tag_id = t.id WHERE ct.client_id = ?').all(client.id);
   client.activities = db.prepare('SELECT * FROM client_activities WHERE client_id = ? ORDER BY created_at DESC LIMIT 50').all(client.id);
@@ -54,8 +54,8 @@ router.post('/', requirePermission('leads.edit'), (req, res) => {
   const id = crypto.randomUUID();
   const now = Date.now();
 
-  db.prepare(`INSERT INTO clients (id, lead_id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, stage, source, assigned_to, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, lead_id || null, name || '', phone || '', phone_valid ? 1 : 0, email || '', facebook || '', instagram || '', tiktok || '', link || '', location || '', notes || '', status || 'active', stage || 'new', source || '', assigned_to || null, now);
+  db.prepare(`INSERT INTO clients (id, lead_id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, stage, source, assigned_to, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, lead_id || null, name || '', phone || '', phone_valid ? 1 : 0, email || '', facebook || '', instagram || '', tiktok || '', link || '', location || '', notes || '', status || 'active', stage || 'new', source || '', assigned_to || null, now, req.project.id);
 
   if (tag_ids?.length) {
     const stmt = db.prepare('INSERT OR IGNORE INTO client_tags (client_id, tag_id) VALUES (?, ?)');
@@ -65,13 +65,13 @@ router.post('/', requirePermission('leads.edit'), (req, res) => {
   db.prepare('INSERT INTO client_activities (client_id, account_id, action, details, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(id, req.user.id, 'created', JSON.stringify({ by: req.user.username }), now);
 
-  logAudit('client_created', 'client', id, name, { by: req.user.id });
+  logAudit('client_created', 'client', id, name, { by: req.user.id }, req.project.id);
   res.json({ id });
 });
 
 router.put('/:id', requirePermission('leads.edit'), (req, res) => {
   const db = getDB();
-  const existing = db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
+  const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!existing) return res.status(404).json({ error: 'Client not found' });
 
   const { name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, stage, source, assigned_to, tag_ids } = req.body;
@@ -91,7 +91,6 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
     for (const tid of tag_ids) stmt.run(req.params.id, tid);
   }
 
-  // Log significant changes
   const changes = [];
   if (status && status !== existing.status) changes.push(`status: ${existing.status} → ${status}`);
   if (stage && stage !== existing.stage) changes.push(`stage: ${existing.stage} → ${stage}`);
@@ -102,16 +101,16 @@ router.put('/:id', requirePermission('leads.edit'), (req, res) => {
       .run(req.params.id, req.user.id, 'updated', JSON.stringify({ changes, by: req.user.username }), Date.now());
   }
 
-  logAudit('client_updated', 'client', req.params.id, name || existing.name, { by: req.user.id });
+  logAudit('client_updated', 'client', req.params.id, name || existing.name, { by: req.user.id }, req.project.id);
   res.json({ ok: true });
 });
 
 router.delete('/:id', requirePermission('leads.delete'), (req, res) => {
   const db = getDB();
-  const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
+  const client = db.prepare('SELECT * FROM clients WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!client) return res.status(404).json({ error: 'Client not found' });
   db.prepare('DELETE FROM clients WHERE id = ?').run(req.params.id);
-  logAudit('client_deleted', 'client', req.params.id, client.name, { by: req.user.id });
+  logAudit('client_deleted', 'client', req.params.id, client.name, { by: req.user.id }, req.project.id);
   res.json({ ok: true });
 });
 

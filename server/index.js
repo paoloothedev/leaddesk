@@ -2,20 +2,22 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { getDB } from './db.js';
+import { getDB, logAudit } from './db.js';
 import leadsRouter from './routes/leads.js';
 import stagesRouter from './routes/stages.js';
 import campaignsRouter from './routes/campaigns.js';
 import tagsRouter from './routes/tags.js';
 import templatesRouter from './routes/templates.js';
-import jobsRouter from './routes/jobs.js';
+import jobsRouter, { resumeAllProjectJobs } from './routes/jobs.js';
 import settingsRouter from './routes/settings.js';
 import authRouter, { authMiddleware } from './routes/auth.js';
 import accountsRouter from './routes/accounts.js';
 import clientsRouter from './routes/clients.js';
 import emailCampaignsRouter from './routes/emailCampaigns.js';
 import gmapsRouter from './routes/gmaps.js';
-import { initClient, getStatus, onStatusChange, destroyClient, logoutClient } from './whatsapp.js';
+import projectsRouter from './routes/projects.js';
+import { resolveProject } from './middleware/project.js';
+import { initClient, getStatus, onStatusChange, destroyClient, destroyAllClients, logoutClient, migrateLegacyAuth } from './whatsapp.js';
 
 import os from 'os';
 
@@ -25,7 +27,7 @@ process.on('unhandledRejection', (err) => {
 
 const shutdown = async () => {
   console.log('Shutting down, cleaning up WhatsApp...');
-  try { await destroyClient(); } catch {}
+  try { await destroyAllClients(); } catch {}
   process.exit(0);
 };
 process.on('SIGTERM', shutdown);
@@ -49,77 +51,81 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/api/leads', leadsRouter);
-app.use('/api/stages', stagesRouter);
-app.use('/api/campaigns', campaignsRouter);
-app.use('/api/tags', tagsRouter);
-app.use('/api/templates', templatesRouter);
-app.use('/api/jobs', jobsRouter);
-app.use('/api/settings', settingsRouter);
+// ── Auth routes (no project scope) ──────────────────────────────
 app.use('/api/auth', authRouter);
 
+// ── Project management (auth only, no project scope) ────────────
+app.use('/api/projects', authMiddleware, projectsRouter);
+
+// ── Accounts (global, auth only) ────────────────────────────────
+app.use('/api/accounts', authMiddleware, accountsRouter);
+
+// ── Global auth for everything else ─────────────────────────────
 app.use('/api', authMiddleware);
 
-app.use('/api/accounts', accountsRouter);
-app.use('/api/clients', clientsRouter);
-app.use('/api/email-campaigns', emailCampaignsRouter);
-app.use('/api/gmaps', gmapsRouter);
-app.get('/api/stats', (req, res) => {
-  const db = getDB();
+// ── Project-scoped routers ──────────────────────────────────────
+app.use('/api/leads', resolveProject, leadsRouter);
+app.use('/api/stages', resolveProject, stagesRouter);
+app.use('/api/campaigns', resolveProject, campaignsRouter);
+app.use('/api/tags', resolveProject, tagsRouter);
+app.use('/api/templates', resolveProject, templatesRouter);
+app.use('/api/jobs', resolveProject, jobsRouter);
+app.use('/api/settings', resolveProject, settingsRouter);
+app.use('/api/clients', resolveProject, clientsRouter);
+app.use('/api/email-campaigns', resolveProject, emailCampaignsRouter);
+app.use('/api/gmaps', resolveProject, gmapsRouter);
 
-  // Pipeline counts
-  const total = db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'active'").get().c;
-  const verified = db.prepare('SELECT COUNT(*) as c FROM leads WHERE status = ? AND verified = ?').get('active', 1).c;
+// ── Project-scoped inline routes ────────────────────────────────
+app.get('/api/stats', resolveProject, (req, res) => {
+  const db = getDB();
+  const pid = req.project.id;
+
+  const total = db.prepare("SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = 'active'").get(pid).c;
+  const verified = db.prepare('SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = ? AND verified = ?').get(pid, 'active', 1).c;
   const unverified = total - verified;
-  const dead = db.prepare('SELECT COUNT(*) as c FROM leads WHERE status = ?').get('dead').c;
-  const invalidPhone = db.prepare('SELECT COUNT(*) as c FROM leads WHERE status = ? AND phone_valid = ?').get('active', 0).c;
+  const dead = db.prepare('SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = ?').get(pid, 'dead').c;
+  const invalidPhone = db.prepare('SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = ? AND phone_valid = ?').get(pid, 'active', 0).c;
   const inCampaign = db.prepare(`
     SELECT COUNT(DISTINCT l.id) as c FROM leads l
     INNER JOIN campaign_leads cl ON cl.lead_id = l.id
-    WHERE l.status = ?
-  `).get('active').c;
+    WHERE l.project_id = ? AND l.status = ?
+  `).get(pid, 'active').c;
 
-  // Clients converted from leads
-  const totalClients = db.prepare("SELECT COUNT(*) as c FROM clients").get().c;
-  const activeClients = db.prepare("SELECT COUNT(*) as c FROM clients WHERE status = 'active'").get().c;
+  const totalClients = db.prepare('SELECT COUNT(*) as c FROM clients WHERE project_id = ?').get(pid).c;
+  const activeClients = db.prepare("SELECT COUNT(*) as c FROM clients WHERE project_id = ? AND status = 'active'").get(pid).c;
 
-  // Ready for outreach: verified + has phone
   const readyForOutreach = db.prepare(`
     SELECT COUNT(*) as c FROM leads
-    WHERE status = 'active' AND verified = 1 AND phone_valid = 1
-  `).get().c;
+    WHERE project_id = ? AND status = 'active' AND verified = 1 AND phone_valid = 1
+  `).get(pid).c;
 
-  // Verified leads with no tags
   const verifiedNoTags = db.prepare(`
     SELECT COUNT(*) as c FROM leads
-    WHERE status = 'active' AND verified = 1
+    WHERE project_id = ? AND status = 'active' AND verified = 1
     AND id NOT IN (SELECT lead_id FROM lead_tags)
-  `).get().c;
+  `).get(pid).c;
 
-  // Verified leads with no tags and no campaign
   const verifiedNoTagsNoCampaign = db.prepare(`
     SELECT COUNT(*) as c FROM leads
-    WHERE status = 'active' AND verified = 1
+    WHERE project_id = ? AND status = 'active' AND verified = 1
     AND id NOT IN (SELECT lead_id FROM lead_tags)
     AND id NOT IN (SELECT lead_id FROM campaign_leads)
-  `).get().c;
+  `).get(pid).c;
 
-  // Campaign stats
-  const totalCampaigns = db.prepare("SELECT COUNT(*) as c FROM campaigns").get().c;
-  const activeJobs = db.prepare("SELECT COUNT(*) as c FROM broadcast_jobs WHERE status IN ('pending', 'running')").get().c;
+  const totalCampaigns = db.prepare('SELECT COUNT(*) as c FROM campaigns WHERE project_id = ?').get(pid).c;
+  const activeJobs = db.prepare("SELECT COUNT(*) as c FROM broadcast_jobs WHERE project_id = ? AND status IN ('pending', 'running')").get(pid).c;
 
-  // Stage breakdown with verified/unverified
   const stageBreakdown = db.prepare(`
     SELECT s.id, s.name, s.color,
       COUNT(l.id) as count,
       SUM(CASE WHEN l.verified = 1 THEN 1 ELSE 0 END) as verified_count,
       SUM(CASE WHEN l.verified = 0 THEN 1 ELSE 0 END) as unverified_count
     FROM stages s
-    LEFT JOIN leads l ON l.stage_id = s.id AND l.status = 'active'
+    LEFT JOIN leads l ON l.stage_id = s.id AND l.status = 'active' AND l.project_id = s.project_id
+    WHERE s.project_id = ?
     GROUP BY s.id ORDER BY s.sort_order
-  `).all();
+  `).all(pid);
 
-  // Tag breakdown (only dashboard-enabled)
   const tagBreakdown = db.prepare(`
     SELECT t.id, t.name, t.color,
       COUNT(lt.lead_id) as total,
@@ -128,19 +134,17 @@ app.get('/api/stats', (req, res) => {
     FROM tags t
     LEFT JOIN lead_tags lt ON lt.tag_id = t.id
     LEFT JOIN leads l ON l.id = lt.lead_id AND l.status = 'active'
-    WHERE t.show_in_dashboard = 1
+    WHERE t.project_id = ? AND t.show_in_dashboard = 1
     GROUP BY t.id ORDER BY t.name
-  `).all();
+  `).all(pid);
 
-  // Recent imports
   const recentImports = db.prepare(`
-    SELECT * FROM import_logs ORDER BY created_at DESC LIMIT 10
-  `).all();
+    SELECT * FROM import_logs WHERE project_id = ? ORDER BY created_at DESC LIMIT 10
+  `).all(pid);
 
-  // Recent audit activity
   const recentActivity = db.prepare(`
-    SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 20
-  `).all();
+    SELECT * FROM audit_log WHERE project_id = ? ORDER BY created_at DESC LIMIT 20
+  `).all(pid);
 
   res.json({
     total, verified, unverified, dead, invalidPhone, inCampaign,
@@ -171,57 +175,81 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-app.get('/api/import-logs', (req, res) => {
+app.get('/api/import-logs', resolveProject, (req, res) => {
   const db = getDB();
-  const logs = db.prepare('SELECT * FROM import_logs ORDER BY created_at DESC LIMIT 50').all();
+  const logs = db.prepare('SELECT * FROM import_logs WHERE project_id = ? ORDER BY created_at DESC LIMIT 50').all(req.project.id);
   res.json(logs);
 });
 
-app.get('/api/audit-log', (req, res) => {
+app.get('/api/audit-log', resolveProject, (req, res) => {
   const db = getDB();
   const { limit } = req.query;
-  const logs = db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?').all(parseInt(limit) || 100);
+  const logs = db.prepare('SELECT * FROM audit_log WHERE project_id = ? ORDER BY created_at DESC LIMIT ?').all(req.project.id, parseInt(limit) || 100);
   res.json(logs);
 });
 
-app.get('/api/export', (req, res) => {
+app.get('/api/export', resolveProject, (req, res) => {
   const db = getDB();
-  const leads = db.prepare('SELECT * FROM leads').all();
-  const campaigns = db.prepare('SELECT * FROM campaigns').all();
-  const stages = db.prepare('SELECT * FROM stages ORDER BY sort_order').all();
-  const campaign_leads = db.prepare('SELECT * FROM campaign_leads').all();
-  const stage_history = db.prepare('SELECT * FROM stage_history').all();
-  const tags = db.prepare('SELECT * FROM tags').all();
-  const lead_tags = db.prepare('SELECT * FROM lead_tags').all();
+  const pid = req.project.id;
+  const leads = db.prepare('SELECT * FROM leads WHERE project_id = ?').all(pid);
+  const campaigns = db.prepare('SELECT * FROM campaigns WHERE project_id = ?').all(pid);
+  const stages = db.prepare('SELECT * FROM stages WHERE project_id = ? ORDER BY sort_order').all(pid);
+  const campaign_leads = db.prepare(`
+    SELECT cl.* FROM campaign_leads cl
+    INNER JOIN campaigns c ON c.id = cl.campaign_id
+    WHERE c.project_id = ?
+  `).all(pid);
+  const stage_history = db.prepare(`
+    SELECT sh.* FROM stage_history sh
+    INNER JOIN leads l ON l.id = sh.lead_id
+    WHERE l.project_id = ?
+  `).all(pid);
+  const tags = db.prepare('SELECT * FROM tags WHERE project_id = ?').all(pid);
+  const lead_tags = db.prepare(`
+    SELECT lt.* FROM lead_tags lt
+    INNER JOIN leads l ON l.id = lt.lead_id
+    WHERE l.project_id = ?
+  `).all(pid);
   res.json({ leads, campaigns, stages, campaign_leads, stage_history, tags, lead_tags });
 });
 
-app.post('/api/import/backup', (req, res) => {
+app.post('/api/import/backup', resolveProject, (req, res) => {
   const db = getDB();
+  const pid = req.project.id;
   const data = req.body;
   if (!data.leads) return res.status(400).json({ error: 'Invalid backup file' });
-  db.exec('DELETE FROM lead_tags; DELETE FROM stage_history; DELETE FROM campaign_leads; DELETE FROM leads; DELETE FROM campaigns; DELETE FROM stages; DELETE FROM tags;');
-  const insertStage = db.prepare('INSERT INTO stages (id, name, color, sort_order) VALUES (?, ?, ?, ?)');
-  for (const s of data.stages || []) insertStage.run(s.id, s.name, s.color, s.sort_order || 0);
-  const insertLead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const l of data.leads) insertLead.run(l.id, l.name, l.phone || '', l.phone_valid ? 1 : 0, l.email || '', l.facebook || '', l.instagram || '', l.tiktok || '', l.link || '', l.location || '', l.notes || '', l.status || 'active', l.verified ? 1 : 0, l.stage_id, l.created_at, l.dead_at || null);
-  const insertCamp = db.prepare('INSERT INTO campaigns (id, name, created_at) VALUES (?, ?, ?)');
-  for (const c of data.campaigns || []) insertCamp.run(c.id, c.name, c.created_at);
+  // Wipe only this project's data
+  db.exec(`
+    DELETE FROM lead_tags WHERE lead_id IN (SELECT id FROM leads WHERE project_id = '${pid.replace(/'/g, "''")}');
+    DELETE FROM stage_history WHERE lead_id IN (SELECT id FROM leads WHERE project_id = '${pid.replace(/'/g, "''")}');
+    DELETE FROM campaign_leads WHERE campaign_id IN (SELECT id FROM campaigns WHERE project_id = '${pid.replace(/'/g, "''")}');
+    DELETE FROM leads WHERE project_id = '${pid.replace(/'/g, "''")}';
+    DELETE FROM campaigns WHERE project_id = '${pid.replace(/'/g, "''")}';
+    DELETE FROM stages WHERE project_id = '${pid.replace(/'/g, "''")}';
+    DELETE FROM tags WHERE project_id = '${pid.replace(/'/g, "''")}';
+  `);
+  const insertStage = db.prepare('INSERT INTO stages (id, name, color, sort_order, project_id) VALUES (?, ?, ?, ?, ?)');
+  for (const s of data.stages || []) insertStage.run(s.id, s.name, s.color, s.sort_order || 0, pid);
+  const insertLead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const l of data.leads) insertLead.run(l.id, l.name, l.phone || '', l.phone_valid ? 1 : 0, l.email || '', l.facebook || '', l.instagram || '', l.tiktok || '', l.link || '', l.location || '', l.notes || '', l.status || 'active', l.verified ? 1 : 0, l.stage_id, l.created_at, l.dead_at || null, pid);
+  const insertCamp = db.prepare('INSERT INTO campaigns (id, name, created_at, project_id) VALUES (?, ?, ?, ?)');
+  for (const c of data.campaigns || []) insertCamp.run(c.id, c.name, c.created_at, pid);
   const insertCL = db.prepare('INSERT OR IGNORE INTO campaign_leads (lead_id, campaign_id) VALUES (?, ?)');
   for (const cl of data.campaign_leads || []) insertCL.run(cl.lead_id, cl.campaign_id);
   const insertSH = db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
   for (const sh of data.stage_history || []) insertSH.run(sh.lead_id, sh.stage_id, sh.at);
-  const insertTag = db.prepare('INSERT INTO tags (id, name, color, created_at) VALUES (?, ?, ?, ?)');
-  for (const t of data.tags || []) insertTag.run(t.id, t.name, t.color, t.created_at);
+  const insertTag = db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)');
+  for (const t of data.tags || []) insertTag.run(t.id, t.name, t.color, t.created_at, pid);
   const insertLT = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
   for (const lt of data.lead_tags || []) insertLT.run(lt.lead_id, lt.tag_id);
   res.json({ ok: true });
 });
 
 // CSV export
-app.get('/api/export/csv', (req, res) => {
+app.get('/api/export/csv', resolveProject, (req, res) => {
   const db = getDB();
-  const leads = db.prepare("SELECT * FROM leads WHERE status = 'active' ORDER BY created_at ASC").all();
+  const pid = req.project.id;
+  const leads = db.prepare("SELECT * FROM leads WHERE project_id = ? AND status = 'active' ORDER BY created_at ASC").all(pid);
   const header = 'Name,Phone,Phone Valid,Email,Facebook,Instagram,TikTok,Link,Location,Notes,Verified,Stage,Campaigns';
   const rows = leads.map(l => {
     const campNames = db.prepare('SELECT c.name FROM campaigns c INNER JOIN campaign_leads cl ON cl.campaign_id = c.id WHERE cl.lead_id = ?').all(l.id).map(c => c.name).join('; ');
@@ -258,34 +286,43 @@ function csvEscape(v) {
 
 function phoneCsv(v) {
   if (!v) return '';
-  // ="..." forces spreadsheet apps to treat it as text, preserving leading zeros and spaces
   return '="' + String(v).replace(/"/g, '""') + '"';
 }
 
-// Socket.IO — WhatsApp events
-const waStatusUnsubscribe = onStatusChange(() => {
-  io.emit('wa_status', getStatus());
+// ── Socket.IO — WhatsApp events (per-project rooms) ─────────────
+const waStatusUnsubscribe = onStatusChange((projectId, status, qr) => {
+  io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
 });
 
 io.on('connection', (socket) => {
-  // Send current status on connect
-  socket.emit('wa_status', getStatus());
-
-  // Init/re-init WhatsApp client
-  socket.on('wa_init', async () => {
-    await initClient();
+  // Client joins a project room to receive its WA status
+  socket.on('join_project', (projectId) => {
+    if (!projectId) return;
+    socket.join('project:' + projectId);
+    socket.emit('wa_status', { projectId, ...getStatus(projectId) });
   });
 
-  // Disconnect WhatsApp client
-  socket.on('wa_disconnect', async () => {
-    await destroyClient();
-    io.emit('wa_status', getStatus());
+  socket.on('leave_project', (projectId) => {
+    if (!projectId) return;
+    socket.leave('project:' + projectId);
   });
 
-  // Logout WhatsApp (clear session data)
-  socket.on('wa_logout', async () => {
-    await logoutClient();
-    io.emit('wa_status', getStatus());
+  socket.on('wa_init', async ({ projectId } = {}) => {
+    if (!projectId) return;
+    await initClient(projectId).catch(err => console.error('[wa] init failed:', err.message));
+    io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
+  });
+
+  socket.on('wa_disconnect', async ({ projectId } = {}) => {
+    if (!projectId) return;
+    await destroyClient(projectId);
+    io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
+  });
+
+  socket.on('wa_logout', async ({ projectId } = {}) => {
+    if (!projectId) return;
+    await logoutClient(projectId);
+    io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
   });
 });
 
@@ -325,6 +362,19 @@ server.listen(PORT, HOST, () => {
     console.log(`    Network: (use your machine's LAN IP)`);
   }
   console.log('');
-  // Start WhatsApp client in background after server is up
-  initClient().catch(() => console.log('  WhatsApp: init failed (Chromium not available?)'));
+
+  // Migrate legacy flat baileys_auth into Default project's dir
+  try {
+    const db = getDB();
+    const def = db.prepare('SELECT id FROM projects ORDER BY created_at ASC LIMIT 1').get();
+    if (def) migrateLegacyAuth(def.id);
+  } catch {}
+
+  // Resume any pending broadcast jobs (per project, lazily)
+  setTimeout(() => {
+    try { resumeAllProjectJobs(); } catch {}
+  }, 3000);
+
+  // WhatsApp clients are now lazy-initialized per project (no global boot init)
+  console.log('  WhatsApp: clients initialize per-project on demand.\n');
 });

@@ -2,17 +2,18 @@ import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(__dirname, 'leaddesk.db');
+export const DB_PATH = process.env.DB_PATH || join(__dirname, 'leaddesk.db');
 
 let db;
 
-export function logAudit(action, entityType, entityId, entityName, details = {}) {
+export function logAudit(action, entityType, entityId, entityName, details = {}, projectId = null) {
   try {
     const db2 = getDB();
-    db2.prepare('INSERT INTO audit_log (action, entity_type, entity_id, entity_name, details, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(action, entityType, entityId || '', entityName || '', JSON.stringify(details), Date.now());
+    db2.prepare('INSERT INTO audit_log (action, entity_type, entity_id, entity_name, details, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(action, entityType, entityId || '', entityName || '', JSON.stringify(details), Date.now(), projectId);
   } catch {}
 }
 
@@ -22,14 +23,29 @@ export function getDB() {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     initSchema();
+    runMigration();
     seedAdminAccount();
-    seedStages();
+    ensureStagesForAllProjects();
   }
   return db;
 }
 
+function hasColumn(table, col) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  return cols.some(c => c.name === col);
+}
+
 function initSchema() {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#10b981',
+      icon TEXT DEFAULT '📁',
+      created_at INTEGER NOT NULL,
+      created_by TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS leads (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL DEFAULT '',
@@ -46,13 +62,15 @@ function initSchema() {
       verified INTEGER DEFAULT 0,
       stage_id TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      dead_at INTEGER
+      dead_at INTEGER,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS campaigns (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS campaign_leads (
@@ -75,14 +93,16 @@ function initSchema() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       color TEXT NOT NULL DEFAULT '#3d5a45',
-      sort_order INTEGER NOT NULL DEFAULT 0
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS tags (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       color TEXT NOT NULL DEFAULT '#3d5a45',
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS lead_tags (
@@ -97,7 +117,8 @@ function initSchema() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       content TEXT NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS broadcast_jobs (
@@ -112,7 +133,8 @@ function initSchema() {
       failed INTEGER DEFAULT 0,
       created_at INTEGER NOT NULL,
       started_at INTEGER,
-      completed_at INTEGER
+      completed_at INTEGER,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS job_leads (
@@ -127,8 +149,10 @@ function initSchema() {
     );
 
     CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
+      project_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      PRIMARY KEY (project_id, key)
     );
 
     CREATE TABLE IF NOT EXISTS import_logs (
@@ -139,7 +163,8 @@ function initSchema() {
       skipped INTEGER NOT NULL DEFAULT 0,
       updated INTEGER NOT NULL DEFAULT 0,
       details TEXT DEFAULT '{}',
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS audit_log (
@@ -149,7 +174,8 @@ function initSchema() {
       entity_id TEXT DEFAULT '',
       entity_name TEXT DEFAULT '',
       details TEXT DEFAULT '{}',
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS clients (
@@ -171,6 +197,7 @@ function initSchema() {
       assigned_to TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER,
+      project_id TEXT,
       FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL
     );
 
@@ -203,7 +230,8 @@ function initSchema() {
       failed INTEGER DEFAULT 0,
       created_at INTEGER NOT NULL,
       started_at INTEGER,
-      completed_at INTEGER
+      completed_at INTEGER,
+      project_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS email_campaign_leads (
@@ -235,13 +263,85 @@ function initSchema() {
       FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
   `);
-  // Add show_in_dashboard column if not exist
-  try {
-    db.exec('ALTER TABLE tags ADD COLUMN show_in_dashboard INTEGER NOT NULL DEFAULT 1');
-  } catch {}
-  try {
-    db.exec('ALTER TABLE accounts ADD COLUMN email TEXT DEFAULT ""');
-  } catch {}
+
+  // Legacy column adds for pre-existing installs
+  try { db.exec('ALTER TABLE tags ADD COLUMN show_in_dashboard INTEGER NOT NULL DEFAULT 1'); } catch {}
+  try { db.exec('ALTER TABLE accounts ADD COLUMN email TEXT DEFAULT ""'); } catch {}
+}
+
+const SCOPED_TABLES = [
+  'leads', 'campaigns', 'stages', 'tags', 'message_templates',
+  'broadcast_jobs', 'clients', 'email_campaigns', 'import_logs', 'audit_log', 'settings',
+];
+
+function runMigration() {
+  // 1. Ensure projects table exists (done in initSchema)
+  // 2. Add project_id columns to legacy tables
+  for (const t of SCOPED_TABLES) {
+    if (!hasColumn(t, 'project_id')) {
+      db.exec(`ALTER TABLE ${t} ADD COLUMN project_id TEXT`);
+    }
+  }
+
+  // 3. Recreate settings with composite PK if needed
+  const settingsCols = db.prepare('PRAGMA table_info(settings)').all();
+  const settingsPk = settingsCols.filter(c => c.pk > 0).map(c => c.name).sort();
+  const wantPk = ['key', 'project_id'].sort();
+  if (settingsPk.join(',') !== wantPk.join(',')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS settings_new (
+        project_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (project_id, key)
+      );
+      INSERT OR IGNORE INTO settings_new (project_id, key, value)
+        SELECT COALESCE(project_id, ''), key, value FROM settings;
+      DROP TABLE settings;
+      ALTER TABLE settings_new RENAME TO settings;
+    `);
+  }
+
+  // 4. Ensure a Default project exists; backfill all legacy rows into it
+  const projCount = db.prepare('SELECT COUNT(*) as c FROM projects').get().c;
+  let defaultId;
+
+  if (projCount === 0) {
+    defaultId = 'proj_' + crypto.randomBytes(6).toString('hex');
+    db.prepare('INSERT INTO projects (id, name, color, icon, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(defaultId, 'Default', '#10b981', '📁', Date.now(), 'admin');
+  } else {
+    defaultId = db.prepare('SELECT id FROM projects ORDER BY created_at ASC LIMIT 1').get().id;
+  }
+
+  // Backfill any NULL project_id rows into the default project
+  for (const t of SCOPED_TABLES) {
+    if (t === 'settings') {
+      db.prepare("UPDATE settings SET project_id = ? WHERE project_id IS NULL OR project_id = ''").run(defaultId);
+      // Also fix rows that may have empty project_id from the recreate step when no projects existed yet
+      db.prepare("DELETE FROM settings WHERE project_id = '' AND EXISTS (SELECT 1 FROM settings s2 WHERE s2.key = settings.key AND s2.project_id = ?)").run(defaultId);
+      db.prepare("UPDATE settings SET project_id = ? WHERE project_id = ''").run(defaultId);
+    } else {
+      db.prepare(`UPDATE ${t} SET project_id = ? WHERE project_id IS NULL`).run(defaultId);
+    }
+  }
+
+  // 5. Add helpful indexes
+  const indexes = [
+    'CREATE INDEX IF NOT EXISTS idx_leads_project ON leads(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_campaigns_project ON campaigns(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_stages_project ON stages(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_tags_project ON tags(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_templates_project ON message_templates(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_jobs_project ON broadcast_jobs(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_clients_project ON clients(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_email_campaigns_project ON email_campaigns(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_import_logs_project ON import_logs(project_id)',
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_project ON audit_log(project_id)',
+  ];
+  for (const sql of indexes) {
+    try { db.exec(sql); } catch {}
+  }
 }
 
 function seedAdminAccount() {
@@ -253,19 +353,44 @@ function seedAdminAccount() {
   }
 }
 
-function seedStages() {
-  const count = db.prepare('SELECT COUNT(*) as c FROM stages').get();
-  if (count.c === 0) {
-    const insert = db.prepare('INSERT INTO stages (id, name, color, sort_order) VALUES (?, ?, ?, ?)');
-    const defaultStages = [
-      ['s1', 'Cold Calling', '#3d5a45', 0],
-      ['s2', 'Contacted', '#c79a3f', 1],
-      ['s3', 'Interested', '#3a7ca1', 2],
-      ['s4', 'Customer', '#3d7a52', 3],
-      ['s5', 'Lost', '#a13a3a', 4],
-    ];
-    for (const s of defaultStages) {
-      insert.run(...s);
-    }
+const DEFAULT_STAGES = [
+  ['s1', 'Cold Calling', '#3d5a45', 0],
+  ['s2', 'Contacted', '#c79a3f', 1],
+  ['s3', 'Interested', '#3a7ca1', 2],
+  ['s4', 'Customer', '#3d7a52', 3],
+  ['s5', 'Lost', '#a13a3a', 4],
+];
+
+export function seedStagesForProject(projectId) {
+  const count = db.prepare('SELECT COUNT(*) as c FROM stages WHERE project_id = ?').get(projectId).c;
+  if (count > 0) return;
+  const insert = db.prepare('INSERT INTO stages (id, name, color, sort_order, project_id) VALUES (?, ?, ?, ?, ?)');
+  // Stage ids must be globally unique (PK). Use a per-project suffix.
+  const suffix = projectId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || crypto.randomBytes(3).toString('hex');
+  for (const [id, name, color, order] of DEFAULT_STAGES) {
+    insert.run(`${id}_${suffix}`, name, color, order, projectId);
   }
+}
+
+function ensureStagesForAllProjects() {
+  const projects = db.prepare('SELECT id FROM projects').all();
+  for (const p of projects) {
+    seedStagesForProject(p.id);
+  }
+  // Legacy: stages with no project_id (shouldn't happen after migration, but safe)
+  try {
+    const orphan = db.prepare('SELECT COUNT(*) as c FROM stages WHERE project_id IS NULL').get().c;
+    if (orphan > 0) {
+      const def = db.prepare('SELECT id FROM projects ORDER BY created_at ASC LIMIT 1').get();
+      if (def) db.prepare('UPDATE stages SET project_id = ? WHERE project_id IS NULL').run(def.id);
+    }
+  } catch {}
+}
+
+export function createProject(name, color, icon, createdBy) {
+  const id = 'proj_' + crypto.randomBytes(6).toString('hex');
+  db.prepare('INSERT INTO projects (id, name, color, icon, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, name || 'Untitled', color || '#10b981', icon || '📁', Date.now(), createdBy || null);
+  seedStagesForProject(id);
+  return db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
 }

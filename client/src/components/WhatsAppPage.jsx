@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { io } from 'socket.io-client'
 import { WhatsappLogo, Plugs, PlugsConnected, SignOut, Warning } from '@phosphor-icons/react'
+import { getCurrentProjectId } from '../api'
 
 export default function WhatsAppPage({ showToast }) {
   const [socket, setSocket] = useState(null)
@@ -9,24 +10,42 @@ export default function WhatsAppPage({ showToast }) {
   const [qr, setQR] = useState(null)
   const [restrictionReason, setRestrictionReason] = useState(null)
   const socketRef = useRef(null)
+  const projectIdRef = useRef(getCurrentProjectId())
 
   useEffect(() => {
+    projectIdRef.current = getCurrentProjectId()
+    const pid = projectIdRef.current
+    if (!pid) return
+
     const s = io(window.location.origin)
     socketRef.current = s
     setSocket(s)
-    s.on('wa_status', (status) => {
-      setWaStatus(status.status)
-      setQR(status.qr)
-      setRestrictionReason(status.restrictionReason || null)
+
+    s.on('connect', () => {
+      s.emit('join_project', pid)
     })
-    return () => { s.disconnect() }
+
+    s.on('wa_status', (payload) => {
+      // Ignore statuses from other projects
+      if (payload.projectId && payload.projectId !== pid) return
+      setWaStatus(payload.status)
+      setQR(payload.qr)
+      setRestrictionReason(payload.restrictionReason || null)
+    })
+
+    return () => {
+      s.emit('leave_project', pid)
+      s.disconnect()
+    }
   }, [])
 
-  const handleInit = async () => { socket?.emit('wa_init') }
-  const handleDisconnect = async () => { socket?.emit('wa_disconnect') }
+  const pid = () => projectIdRef.current
+
+  const handleInit = async () => { socket?.emit('wa_init', { projectId: pid() }) }
+  const handleDisconnect = async () => { socket?.emit('wa_disconnect', { projectId: pid() }) }
   const handleLogout = async () => {
-    if (!window.confirm('Logout and connect a different WhatsApp account?')) return
-    socket?.emit('wa_logout')
+    if (!window.confirm('Logout and connect a different WhatsApp account for this project?')) return
+    socket?.emit('wa_logout', { projectId: pid() })
   }
 
   const statusConfig = {
@@ -49,7 +68,10 @@ export default function WhatsAppPage({ showToast }) {
         transition={{ type: 'spring', stiffness: 100, damping: 20 }}
         className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50"
       >
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Connection</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Connection</h2>
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Each project has its own WhatsApp</span>
+        </div>
         <div className="flex items-center gap-3 mb-4">
           <span className={`w-3 h-3 rounded-full ${config.dot}`} />
           <StatusIcon size={18} className="text-zinc-400 dark:text-zinc-500" />

@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MagnifyingGlass, Funnel, Plus, CaretRight, Trash, X, CheckCircle,
-  SquaresFour, List, ArrowRight
+  SquaresFour, List, ArrowRight, PaperPlaneTilt
 } from '@phosphor-icons/react'
 import { getClients, deleteClient, bulkAction, getLeads } from '../api'
 import ClientModal from './ClientModal'
+import WhatsAppSend from './WhatsAppSend'
 
 const STAGE_OPTIONS = [
   { value: 'new', label: 'New', color: 'bg-zinc-400', hex: '#a1a1aa' },
@@ -39,6 +40,8 @@ export default function ClientsList({ stages, tags, refreshId, showToast, refres
   const leadSearchTimer = useRef(null)
   const [viewMode, setViewMode] = useState('table')
   const [openClientId, setOpenClientId] = useState(null)
+  const [selected, setSelected] = useState(new Set())
+  const [showBulkWhatsApp, setShowBulkWhatsApp] = useState(false)
 
   const loadClients = useCallback(async () => {
     try {
@@ -125,10 +128,40 @@ export default function ClientsList({ stages, tags, refreshId, showToast, refres
     count: clients.filter(c => c.stage === s.value).length
   }))
 
+  const activeClients = clients.filter(c => c.status === 'active').length
+  const inactiveClients = clients.filter(c => c.status !== 'active').length
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (selected.size === filteredClients.length) setSelected(new Set())
+    else setSelected(new Set(filteredClients.map(c => c.id)))
+  }
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selected)
+    if (!ids.length || !confirm(`Delete ${ids.length} clients permanently?`)) return
+    try {
+      for (const id of ids) await deleteClient(id)
+      showToast(`Deleted ${ids.length} clients.`)
+      setSelected(new Set())
+      refresh()
+    } catch { showToast('Failed to delete.', true) }
+  }
+
   const groupedClients = STAGE_OPTIONS.reduce((acc, s) => {
     acc[s.value] = clients.filter(c => c.stage === s.value)
     return acc
   }, {})
+
+  const filteredClients = clients
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -157,6 +190,20 @@ export default function ClientsList({ stages, tags, refreshId, showToast, refres
             <Plus size={14} weight="bold" /> Add Client
           </button>
         </div>
+      </div>
+
+      {/* Pipeline Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 mb-5">
+        {stageCounts.map(s => (
+          <button key={s.value} onClick={() => setFStage(fStage === s.value ? '' : s.value)}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${fStage === s.value ? 'border-zinc-400 dark:border-zinc-500 bg-zinc-50 dark:bg-zinc-800/50 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700'}`}>
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.color}`} />
+            <div className="text-left min-w-0">
+              <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 truncate">{s.label}</div>
+              <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">{s.count}</div>
+            </div>
+          </button>
+        ))}
       </div>
 
       {/* Add from Leads Modal */}
@@ -270,6 +317,40 @@ export default function ClientsList({ stages, tags, refreshId, showToast, refres
         </div>
       )}
 
+      {/* Bulk Actions */}
+      {selected.size > 0 && viewMode === 'table' && (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
+              <input type="checkbox" checked={selected.size === filteredClients.length} onChange={toggleAll}
+                className="accent-emerald-500 w-3.5 h-3.5" />
+              Select all
+            </label>
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{selected.size} selected</span>
+            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+            <button onClick={() => setShowBulkWhatsApp(true)}
+              className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
+              <PaperPlaneTilt size={12} className="mr-1.5" weight="fill" />
+              Send WhatsApp
+            </button>
+            <button onClick={handleBulkDelete}
+              className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors active:scale-[0.98]">
+              <Trash size={12} className="mr-1.5" />
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showBulkWhatsApp && (
+        <WhatsAppSend
+          leads={clients.filter(c => selected.has(c.id)).map(c => ({ id: c.lead_id || c.id, phone: c.phone, name: c.name }))}
+          campaignName={null}
+          close={() => setShowBulkWhatsApp(false)}
+          showToast={showToast}
+        />
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="relative">
@@ -349,6 +430,10 @@ export default function ClientsList({ stages, tags, refreshId, showToast, refres
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
+                  <th className="w-10 py-3 px-2">
+                    <input type="checkbox" checked={selected.size > 0 && selected.size === filteredClients.length} onChange={toggleAll}
+                      className="accent-emerald-500 w-3.5 h-3.5" />
+                  </th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Name</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Contact</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Stage</th>
@@ -363,6 +448,10 @@ export default function ClientsList({ stages, tags, refreshId, showToast, refres
                   return (
                     <tr key={c.id} onClick={() => setOpenClientId(c.id)}
                       className="border-b border-zinc-50 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors cursor-pointer">
+                      <td className="py-3 px-2" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}
+                          className="accent-emerald-500 w-3.5 h-3.5" />
+                      </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ background: stage.hex }}>

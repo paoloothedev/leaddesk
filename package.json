@@ -15,5 +15,8 @@
     "build": "npm run build --prefix client && rm -rf server/public && cp -r client/dist server/public",
     "start": "npm start --prefix server",
     "setup": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }

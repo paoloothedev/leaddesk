@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Routes, Route, Navigate, useParams, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { io } from 'socket.io-client'
 import Sidebar from './components/Sidebar'
 import Layout from './components/Layout'
 import Dashboard from './components/Dashboard'
@@ -16,7 +16,8 @@ import ClockWidget from './components/ClockWidget'
 import Login from './components/Login'
 import ClientsList from './components/ClientsList'
 import GoogleMapsScraper from './components/GoogleMapsScraper'
-import { getStats, getStages, getTags, getCampaigns, getSettings } from './api'
+import ProjectPicker from './components/ProjectPicker'
+import { getStats, getStages, getTags, getCampaigns, getSettings, getProjects, setCurrentProjectId } from './api'
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -27,9 +28,85 @@ const pageVariants = {
 const VIEWS = ['dashboard', 'leads', 'clients', 'scraper', 'campaigns', 'dead', 'settings', 'import']
 
 export default function App() {
-  const [view, setView] = useState('dashboard')
-  const [refreshId, setRefreshId] = useState(0)
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
+  const [user, setUser] = useState(null)
+  const [authChecked, setAuthChecked] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setUser(data))
+      .catch(() => {})
+      .finally(() => setAuthChecked(true))
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode)
+  }, [darkMode])
+
+  const toggleDarkMode = useCallback(() => {
+    setDarkMode(prev => {
+      const next = !prev
+      localStorage.setItem('darkMode', next)
+      document.documentElement.classList.toggle('dark', next)
+      return next
+    })
+  }, [])
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {}
+    setUser(null)
+    setCurrentProjectId(null)
+  }, [])
+
+  if (!authChecked) return null
+
+  if (!user) {
+    return <Login onLogin={setUser} />
+  }
+
+  return (
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <ProjectPicker
+            user={user}
+            onLogout={handleLogout}
+            darkMode={darkMode}
+            toggleDarkMode={toggleDarkMode}
+          />
+        }
+      />
+      <Route
+        path="/p/:projectId/*"
+        element={
+          <ProjectShell
+            user={user}
+            onLogout={handleLogout}
+            darkMode={darkMode}
+            toggleDarkMode={toggleDarkMode}
+          />
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+
+function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
+  const { projectId } = useParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Set project id SYNCHRONOUSLY during render — before any child effects fire.
+  // (Child useEffects run before parent useEffects, so setting it only in an
+  // effect causes a race where the first data fetches go out without the header.)
+  setCurrentProjectId(projectId)
+
+  const [refreshId, setRefreshId] = useState(0)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [stats, setStats] = useState(null)
@@ -42,24 +119,33 @@ export default function App() {
   const [selectedCampId, setSelectedCampId] = useState(null)
   const [toastMsg, setToastMsg] = useState(null)
   const [timezone, setTimezone] = useState(() => localStorage.getItem('timezone') || 'UTC')
-  const [user, setUser] = useState(null)
-  const [authChecked, setAuthChecked] = useState(false)
+  const [project, setProject] = useState(null)
+  const [projectError, setProjectError] = useState(null)
   const toastTimer = useRef(null)
-  const socketRef = useRef(null)
 
-  useEffect(() => {
-    const s = io(window.location.origin)
-    socketRef.current = s
-    return () => s.disconnect()
-  }, [])
+  // Derive view from path: /p/:projectId/dashboard → 'dashboard'
+  const pathParts = location.pathname.split('/')
+  const rawView = pathParts[3] || 'dashboard'
+  const view = VIEWS.includes(rawView) ? rawView : 'dashboard'
 
+  // Verify project exists (header already set during render above)
   useEffect(() => {
-    fetch('/api/auth/me', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { setUser(data) })
+    let cancelled = false
+    getProjects()
+      .then(list => {
+        if (cancelled) return
+        const p = list.find(x => x.id === projectId)
+        if (!p) {
+          setProjectError('Project not found')
+          navigate('/', { replace: true })
+        } else {
+          setProject(p)
+          setProjectError(null)
+        }
+      })
       .catch(() => {})
-      .finally(() => setAuthChecked(true))
-  }, [])
+    return () => { cancelled = true }
+  }, [projectId, navigate])
 
   const showToast = useCallback((msg, warn = false) => {
     setToastMsg({ msg, warn })
@@ -71,12 +157,19 @@ export default function App() {
     setRefreshId(r => r + 1)
   }, [])
 
+  // Refresh data when project or view changes
+  useEffect(() => {
+    refresh()
+  }, [projectId, refresh])
+
   const loadStats = useCallback(async () => {
     try {
       const s = await getStats()
       setStats(s)
     } catch {}
   }, [])
+
+  useEffect(() => { loadStats() }, [loadStats, refreshId])
 
   const loadStages = useCallback(async () => {
     try {
@@ -92,29 +185,8 @@ export default function App() {
     } catch {}
   }, [])
 
-  const toggleDarkMode = useCallback(() => {
-    setDarkMode(prev => {
-      const next = !prev
-      localStorage.setItem('darkMode', next)
-      document.documentElement.classList.toggle('dark', next)
-      return next
-    })
-  }, [])
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode)
-  }, [darkMode])
-
-  const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed(prev => {
-      const next = !prev
-      localStorage.setItem('sidebarCollapsed', next)
-      return next
-    })
-  }, [])
-
-  const openMobileMenu = useCallback(() => setMobileMenuOpen(true), [])
-  const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), [])
+  useEffect(() => { loadStages() }, [loadStages, refreshId])
+  useEffect(() => { loadTags() }, [loadTags, refreshId])
 
   const loadCampaigns = useCallback(async () => {
     try {
@@ -139,10 +211,21 @@ export default function App() {
     })()
   }, [refreshId])
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev
+      localStorage.setItem('sidebarCollapsed', next)
+      return next
+    })
+  }, [])
+
+  const openMobileMenu = useCallback(() => setMobileMenuOpen(true), [])
+  const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), [])
+
   const goView = useCallback((v) => {
-    setView(v)
+    navigate(`/p/${projectId}/${v}`)
     refresh()
-  }, [refresh])
+  }, [navigate, projectId, refresh])
 
   const openLeadModal = useCallback((id) => {
     setEditingLeadId(id)
@@ -162,13 +245,6 @@ export default function App() {
   const closeCampModal = useCallback(() => {
     setCampModalOpen(false)
     setSelectedCampId(null)
-  }, [])
-
-  const handleLogout = useCallback(async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-    } catch {}
-    setUser(null)
   }, [])
 
   const renderView = () => {
@@ -194,10 +270,12 @@ export default function App() {
     }
   }
 
-  if (!authChecked) return null
-
-  if (!user) {
-    return <Login onLogin={setUser} />
+  if (projectError) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+        <p className="text-sm text-zinc-500">{projectError}</p>
+      </div>
+    )
   }
 
   return (
@@ -215,7 +293,8 @@ export default function App() {
         mobileMenuOpen={mobileMenuOpen}
         closeMobileMenu={closeMobileMenu}
         user={user}
-        onLogout={handleLogout}
+        onLogout={onLogout}
+        project={project}
       />
       <Layout sidebarCollapsed={sidebarCollapsed} openMobileMenu={openMobileMenu}>
         <ClockWidget timezone={timezone} />

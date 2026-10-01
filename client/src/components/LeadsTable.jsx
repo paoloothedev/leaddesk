@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   MagnifyingGlass, Funnel, CheckCircle, XCircle, Trash,
-  ArrowSquareOut, UserPlus, CaretRight
+  ArrowSquareOut, UserPlus, CaretRight, PaperPlaneTilt
 } from '@phosphor-icons/react'
 import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign } from '../api'
+import WhatsAppSend from './WhatsAppSend'
 
 function socialLinks(l) {
   return (
@@ -42,6 +43,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
   const [showBulkStage, setShowBulkStage] = useState(false)
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [showBulkCampaign, setShowBulkCampaign] = useState(false)
+  const [showBulkWhatsApp, setShowBulkWhatsApp] = useState(false)
 
   const loadLeads = useCallback(async () => {
     try {
@@ -260,8 +262,22 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                 {(campaigns || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}
+            <button onClick={() => setShowBulkWhatsApp(true)}
+              className="inline-flex items-center px-3 h-7 rounded-md text-[11px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
+              <PaperPlaneTilt size={12} className="mr-1.5" weight="fill" />
+              Send WhatsApp
+            </button>
           </div>
         </div>
+      )}
+
+      {showBulkWhatsApp && (
+        <WhatsAppSend
+          leads={leads.filter(l => selected.has(l.id))}
+          campaignName={null}
+          close={() => setShowBulkWhatsApp(false)}
+          showToast={showToast}
+        />
       )}
 
       {leads.length === 0 ? (
