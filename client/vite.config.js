@@ -14,7 +14,8 @@ export default defineConfig({
     host: SERVER_HOST === '0.0.0.0' ? true : SERVER_HOST,
     port: parseInt(process.env.CLIENT_PORT) || 5173,
     proxy: {
-      '/api': proxyTarget
+      '/api': proxyTarget,
+      '/socket.io': { target: proxyTarget, ws: true }
     }
   }
 })

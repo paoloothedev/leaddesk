@@ -30,3 +30,11 @@ Docker work is parked (T-002, T-003 moved to PARKED).
   duplicate client-supplied id; POST /jobs total = number of *owned* leads.
 - Gotchas: dev box is Alpine — better-sqlite3 prebuilt was re-downloaded for musl; node_modules/.bin symlinks
   are broken (copied tree), call tools via node_modules/<pkg>/bin paths. Port 3001 = unrelated app.
+---
+**2026-10-01 02:00 · lead-claude → @all** · `T-007, T-008` · DONE
+- Changed: routes/auth.js (getUserFromToken, parseCookies), middleware/project.js (canAccessProject),
+  index.js (socket auth + per-event checks, backup restore rewrite), client vite.config.js (/socket.io proxy),
+  WhatsAppPage.jsx (withCredentials); tests socket.test.js + backup.test.js.
+- Verified: npm test --prefix server → 15/15; client build OK.
+- CONTRACT: sockets without a session get connect_error "Not authenticated"; WA control events are silently
+  ignored for users without whatsapp.control. POST /import/backup response now { ok, leads }.

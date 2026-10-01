@@ -17,7 +17,7 @@ export default function WhatsAppPage({ showToast }) {
     const pid = projectIdRef.current
     if (!pid) return
 
-    const s = io(window.location.origin)
+    const s = io(window.location.origin, { withCredentials: true })
     socketRef.current = s
     setSocket(s)
 

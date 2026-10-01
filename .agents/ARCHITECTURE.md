@@ -26,6 +26,8 @@ api.js request()                                  cookie parser (inline, sets re
   projects, accounts). leads/campaigns/jobs/tags/stages/templates/settings do not check permissions.
 - **Ownership helpers** (`lib/scope.js`): `ownedIds(table, projectId, ids)` filters foreign ids out,
   `isOwned(table, projectId, id)` for single ids. Covered by `test/isolation.test.js`.
+- **canAccessProject(user, projectId)** (`middleware/project.js`): the single place for workspace access rules,
+  used by HTTP and sockets.
 - **resolveProject** (`middleware/project.js`): project id from `X-Project-Id` header or `?project=` →
   `req.project` (full row). 400 if missing, 404 if unknown. It does **not** check the user has access to
   that project — all logged-in users see all projects.
@@ -94,12 +96,13 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/clients` | routes/clients.js | GET, GET /:id, POST, PUT /:id, DELETE /:id, POST /:id/activity |
 | `/email-campaigns` | routes/emailCampaigns.js | CRUD + lead membership |
 | `/gmaps` | routes/gmaps.js | POST /scrape, GET /jobs, GET/DELETE /jobs/:id, GET /jobs/:id/download, POST /jobs/:id/import |
-| inline | index.js | GET /stats, GET /import-logs, GET /audit-log, GET /export (JSON backup), POST /import/backup (wipes & restores project), GET /export/csv |
+| inline | index.js | GET /stats, GET /import-logs, GET /audit-log, GET /export (JSON backup), POST /import/backup (one transaction: wipes project, restores with fresh ids — works across workspaces), GET /export/csv |
 
 ### Socket.IO (index.js ↔ WhatsAppPage.jsx)
 Client → server: `join_project(projectId)`, `leave_project`, `wa_init {projectId}`, `wa_disconnect {projectId}`,
 `wa_logout {projectId}`. Server → room `project:<id>`: `wa_status {projectId, status, qr, ready, restricted, restrictionReason}`.
-⚠ Socket connections are **not authenticated**.
+Sockets authenticate with the `lead_session` cookie (`io.use`), every event re-checks `canAccessProject()`,
+and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin). Vite dev proxy forwards `/socket.io`.
 
 ## 4. Subsystems
 

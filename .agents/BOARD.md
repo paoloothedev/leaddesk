@@ -39,26 +39,6 @@ _(none)_
 - Depends on: T-005
 - Updated: 2026-10-01
 
-### T-007 · Authenticate Socket.IO connections
-- Status: TODO
-- Owner: —
-- Role: integrations
-- Priority: P1
-- Files: server/index.js, client/src/components/WhatsAppPage.jsx
-- Updated: 2026-10-01
-- Notes: anyone reaching the port can emit `wa_logout {projectId}` / read QR codes. Validate
-  `lead_session` cookie in `io.use()` and verify the project exists.
-
-### T-008 · Parameterise SQL in /api/import/backup
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P1
-- Files: server/index.js
-- Updated: 2026-10-01
-- Notes: uses `'${pid}'` string building inside `db.exec`. Rewrite with prepared statements inside a
-  `db.transaction`. Also: backup restore doesn't include clients/templates/settings (document or extend).
-
 ### T-009 · Persist broadcast daily counter; honour delay_min/max
 - Status: TODO
 - Owner: —
@@ -130,6 +110,28 @@ _(none)_
   lists only member projects. Frontend members UI = separate task.
 
 ## DONE
+
+### T-008 · Parameterise SQL in /api/import/backup
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P1
+- Files: server/index.js
+- Updated: 2026-10-01 01:04
+- Notes: uses `'${pid}'` string building inside `db.exec`. Rewrite with prepared statements inside a
+  `db.transaction`. Also: backup restore doesn't include clients/templates/settings (document or extend).
+  → Rewritten as one transaction with fresh ids + id remapping (backup from another workspace now works). test/backup.test.js.
+
+### T-007 · Authenticate Socket.IO connections
+- Status: DONE
+- Owner: lead-claude
+- Role: integrations
+- Priority: P1
+- Files: server/index.js, client/src/components/WhatsAppPage.jsx
+- Updated: 2026-10-01 01:04
+- Notes: anyone reaching the port can emit `wa_logout {projectId}` / read QR codes. Validate
+  `lead_session` cookie in `io.use()` and verify the project exists.
+  → io.use() checks lead_session; every event checks canAccessProject(); wa_init/disconnect/logout need whatsapp.control. Vite dev proxy now forwards /socket.io. test/socket.test.js.
 
 ### T-012 · Add a minimal test harness
 - Status: DONE

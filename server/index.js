@@ -2,7 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { getDB, logAudit } from './db.js';
+import { getDB, logAudit, seedStagesForProject } from './db.js';
+import crypto from 'crypto';
 import leadsRouter from './routes/leads.js';
 import stagesRouter from './routes/stages.js';
 import campaignsRouter from './routes/campaigns.js';
@@ -10,13 +11,13 @@ import tagsRouter from './routes/tags.js';
 import templatesRouter from './routes/templates.js';
 import jobsRouter, { resumeAllProjectJobs } from './routes/jobs.js';
 import settingsRouter from './routes/settings.js';
-import authRouter, { authMiddleware } from './routes/auth.js';
+import authRouter, { authMiddleware, getUserFromToken, parseCookies } from './routes/auth.js';
 import accountsRouter from './routes/accounts.js';
 import clientsRouter from './routes/clients.js';
 import emailCampaignsRouter from './routes/emailCampaigns.js';
 import gmapsRouter from './routes/gmaps.js';
 import projectsRouter from './routes/projects.js';
-import { resolveProject } from './middleware/project.js';
+import { resolveProject, canAccessProject } from './middleware/project.js';
 import { adoptLegacyJobs } from './gmaps/jobs.js';
 import { initClient, getStatus, onStatusChange, destroyClient, destroyAllClients, logoutClient, migrateLegacyAuth } from './whatsapp.js';
 
@@ -36,19 +37,14 @@ process.on('SIGINT', shutdown);
 
 const app = express();
 const server = http.createServer(app);
-const io = new SocketIOServer(server, { cors: { origin: '*' } });
+const io = new SocketIOServer(server, { cors: { origin: true, credentials: true } });
 const PORT = parseInt(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
-  req.cookies = {};
-  const raw = req.headers.cookie || '';
-  for (const part of raw.split(';')) {
-    const [k, ...v] = part.trim().split('=');
-    if (k) req.cookies[k] = v.join('=');
-  }
+  req.cookies = parseCookies(req.headers.cookie);
   next();
 });
 
@@ -218,32 +214,73 @@ app.post('/api/import/backup', resolveProject, (req, res) => {
   const db = getDB();
   const pid = req.project.id;
   const data = req.body;
-  if (!data.leads) return res.status(400).json({ error: 'Invalid backup file' });
-  // Wipe only this project's data
-  db.exec(`
-    DELETE FROM lead_tags WHERE lead_id IN (SELECT id FROM leads WHERE project_id = '${pid.replace(/'/g, "''")}');
-    DELETE FROM stage_history WHERE lead_id IN (SELECT id FROM leads WHERE project_id = '${pid.replace(/'/g, "''")}');
-    DELETE FROM campaign_leads WHERE campaign_id IN (SELECT id FROM campaigns WHERE project_id = '${pid.replace(/'/g, "''")}');
-    DELETE FROM leads WHERE project_id = '${pid.replace(/'/g, "''")}';
-    DELETE FROM campaigns WHERE project_id = '${pid.replace(/'/g, "''")}';
-    DELETE FROM stages WHERE project_id = '${pid.replace(/'/g, "''")}';
-    DELETE FROM tags WHERE project_id = '${pid.replace(/'/g, "''")}';
-  `);
-  const insertStage = db.prepare('INSERT INTO stages (id, name, color, sort_order, project_id) VALUES (?, ?, ?, ?, ?)');
-  for (const s of data.stages || []) insertStage.run(s.id, s.name, s.color, s.sort_order || 0, pid);
-  const insertLead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const l of data.leads) insertLead.run(l.id, l.name, l.phone || '', l.phone_valid ? 1 : 0, l.email || '', l.facebook || '', l.instagram || '', l.tiktok || '', l.link || '', l.location || '', l.notes || '', l.status || 'active', l.verified ? 1 : 0, l.stage_id, l.created_at, l.dead_at || null, pid);
-  const insertCamp = db.prepare('INSERT INTO campaigns (id, name, created_at, project_id) VALUES (?, ?, ?, ?)');
-  for (const c of data.campaigns || []) insertCamp.run(c.id, c.name, c.created_at, pid);
-  const insertCL = db.prepare('INSERT OR IGNORE INTO campaign_leads (lead_id, campaign_id) VALUES (?, ?)');
-  for (const cl of data.campaign_leads || []) insertCL.run(cl.lead_id, cl.campaign_id);
-  const insertSH = db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
-  for (const sh of data.stage_history || []) insertSH.run(sh.lead_id, sh.stage_id, sh.at);
-  const insertTag = db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)');
-  for (const t of data.tags || []) insertTag.run(t.id, t.name, t.color, t.created_at, pid);
-  const insertLT = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
-  for (const lt of data.lead_tags || []) insertLT.run(lt.lead_id, lt.tag_id);
-  res.json({ ok: true });
+  if (!data || !Array.isArray(data.leads)) return res.status(400).json({ error: 'Invalid backup file' });
+
+  // Every restored row gets a fresh id, so a backup from another workspace (or install) can never
+  // collide with existing rows. Maps translate old ids → new ids for the join tables.
+  const newId = (prefix) => prefix + '_' + crypto.randomBytes(6).toString('hex');
+  const stageMap = new Map(), leadMap = new Map(), campMap = new Map(), tagMap = new Map();
+
+  const restore = db.transaction(() => {
+    // Wipe only this project's data (children first)
+    db.prepare('DELETE FROM lead_tags WHERE lead_id IN (SELECT id FROM leads WHERE project_id = ?)').run(pid);
+    db.prepare('DELETE FROM stage_history WHERE lead_id IN (SELECT id FROM leads WHERE project_id = ?)').run(pid);
+    db.prepare('DELETE FROM campaign_leads WHERE campaign_id IN (SELECT id FROM campaigns WHERE project_id = ?)').run(pid);
+    for (const t of ['leads', 'campaigns', 'stages', 'tags']) {
+      db.prepare(`DELETE FROM ${t} WHERE project_id = ?`).run(pid);
+    }
+
+    const insertStage = db.prepare('INSERT INTO stages (id, name, color, sort_order, project_id) VALUES (?, ?, ?, ?, ?)');
+    for (const s of data.stages || []) {
+      const id = newId('stage');
+      stageMap.set(s.id, id);
+      insertStage.run(id, s.name || 'Stage', s.color || '#3d5a45', s.sort_order || 0, pid);
+    }
+    if (!stageMap.size) seedStagesForProject(pid);
+    const fallbackStage = db.prepare('SELECT id FROM stages WHERE project_id = ? ORDER BY sort_order LIMIT 1').get(pid).id;
+
+    const insertLead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const l of data.leads) {
+      const id = newId('lead');
+      leadMap.set(l.id, id);
+      insertLead.run(id, l.name || '', l.phone || '', l.phone_valid ? 1 : 0, l.email || '', l.facebook || '', l.instagram || '', l.tiktok || '', l.link || '', l.location || '', l.notes || '', l.status === 'dead' ? 'dead' : 'active', l.verified ? 1 : 0, stageMap.get(l.stage_id) || fallbackStage, l.created_at || Date.now(), l.dead_at || null, pid);
+    }
+
+    const insertCamp = db.prepare('INSERT INTO campaigns (id, name, created_at, project_id) VALUES (?, ?, ?, ?)');
+    for (const c of data.campaigns || []) {
+      const id = newId('camp');
+      campMap.set(c.id, id);
+      insertCamp.run(id, c.name || 'Campaign', c.created_at || Date.now(), pid);
+    }
+
+    const insertTag = db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)');
+    for (const t of data.tags || []) {
+      const id = newId('tag');
+      tagMap.set(t.id, id);
+      insertTag.run(id, t.name || 'Tag', t.color || '#3d5a45', t.created_at || Date.now(), pid);
+    }
+
+    const insertCL = db.prepare('INSERT OR IGNORE INTO campaign_leads (lead_id, campaign_id) VALUES (?, ?)');
+    for (const cl of data.campaign_leads || []) {
+      if (leadMap.has(cl.lead_id) && campMap.has(cl.campaign_id)) insertCL.run(leadMap.get(cl.lead_id), campMap.get(cl.campaign_id));
+    }
+    const insertSH = db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
+    for (const sh of data.stage_history || []) {
+      if (leadMap.has(sh.lead_id)) insertSH.run(leadMap.get(sh.lead_id), stageMap.get(sh.stage_id) || fallbackStage, sh.at || Date.now());
+    }
+    const insertLT = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
+    for (const lt of data.lead_tags || []) {
+      if (leadMap.has(lt.lead_id) && tagMap.has(lt.tag_id)) insertLT.run(leadMap.get(lt.lead_id), tagMap.get(lt.tag_id));
+    }
+  });
+
+  try {
+    restore();
+  } catch (err) {
+    return res.status(400).json({ error: 'Restore failed, nothing was changed: ' + err.message });
+  }
+  logAudit('restore', 'project', pid, req.project.name, { leads: leadMap.size, stages: stageMap.size, tags: tagMap.size, campaigns: campMap.size }, pid);
+  res.json({ ok: true, leads: leadMap.size });
 });
 
 // CSV export
@@ -295,10 +332,24 @@ const waStatusUnsubscribe = onStatusChange((projectId, status, qr) => {
   io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
 });
 
+// Sockets use the same session cookie as HTTP; every event re-checks project access.
+io.use((socket, next) => {
+  const user = getUserFromToken(parseCookies(socket.handshake.headers.cookie).lead_session);
+  if (!user) return next(new Error('Not authenticated'));
+  socket.data.user = user;
+  next();
+});
+
 io.on('connection', (socket) => {
+  const allowed = (projectId) => !!canAccessProject(socket.data.user, projectId);
+  const canControl = () => {
+    const u = socket.data.user;
+    return u.role === 'admin' || u.permissions.includes('whatsapp.control');
+  };
+
   // Client joins a project room to receive its WA status
   socket.on('join_project', (projectId) => {
-    if (!projectId) return;
+    if (!allowed(projectId)) return;
     socket.join('project:' + projectId);
     socket.emit('wa_status', { projectId, ...getStatus(projectId) });
   });
@@ -309,19 +360,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('wa_init', async ({ projectId } = {}) => {
-    if (!projectId) return;
+    if (!allowed(projectId) || !canControl()) return;
     await initClient(projectId).catch(err => console.error('[wa] init failed:', err.message));
     io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
   });
 
   socket.on('wa_disconnect', async ({ projectId } = {}) => {
-    if (!projectId) return;
+    if (!allowed(projectId) || !canControl()) return;
     await destroyClient(projectId);
     io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
   });
 
   socket.on('wa_logout', async ({ projectId } = {}) => {
-    if (!projectId) return;
+    if (!allowed(projectId) || !canControl()) return;
     await logoutClient(projectId);
     io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
   });

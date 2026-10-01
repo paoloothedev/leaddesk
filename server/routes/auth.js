@@ -24,18 +24,15 @@ function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-export function authMiddleware(req, res, next) {
-  const token = req.cookies?.lead_session;
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
-
+// Resolve a session token to a user object, or null if missing/expired.
+export function getUserFromToken(token) {
+  if (!token) return null;
   const db = getDB();
   const session = db.prepare('SELECT * FROM sessions WHERE token = ? AND expires_at > ?').get(token, Date.now());
-  if (!session) return res.status(401).json({ error: 'Session expired' });
-
+  if (!session) return null;
   const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(session.account_id);
-  if (!account) return res.status(401).json({ error: 'Account not found' });
-
-  req.user = {
+  if (!account) return null;
+  return {
     id: account.id,
     username: account.username,
     display_name: account.display_name,
@@ -44,7 +41,23 @@ export function authMiddleware(req, res, next) {
     parent_id: account.parent_id,
     permissions: JSON.parse(account.permissions || '[]'),
   };
+}
 
+export function parseCookies(header = '') {
+  const cookies = {};
+  for (const part of header.split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k) cookies[k] = v.join('=');
+  }
+  return cookies;
+}
+
+export function authMiddleware(req, res, next) {
+  const token = req.cookies?.lead_session;
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  const user = getUserFromToken(token);
+  if (!user) return res.status(401).json({ error: 'Session expired' });
+  req.user = user;
   next();
 }
 
