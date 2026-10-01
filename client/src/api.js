@@ -357,3 +357,17 @@ export function moveDeal(id, stageId, lostReason) {
 export function deleteDeal(id) {
   return request('/deals/' + id, { method: 'DELETE' });
 }
+
+// ── Custom fields ───────────────────────────────────────────────
+export function getCustomFields(entity) {
+  return request('/custom-fields' + (entity ? '?entity=' + entity : ''));
+}
+export function createCustomField(data) {
+  return request('/custom-fields', { method: 'POST', body: JSON.stringify(data) });
+}
+export function updateCustomField(id, data) {
+  return request('/custom-fields/' + id, { method: 'PUT', body: JSON.stringify(data) });
+}
+export function deleteCustomField(id) {
+  return request('/custom-fields/' + id, { method: 'DELETE' });
+}

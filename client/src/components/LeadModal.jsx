@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X, Trash, Skull, CheckCircle } from '@phosphor-icons/react'
-import { getLead, createLead, updateLead, deleteLead, getProjectMembers, getCompanies } from '../api'
+import { getLead, createLead, updateLead, deleteLead, getProjectMembers, getCompanies, getCustomFields } from '../api'
+import CustomFieldInputs from './CustomFieldInputs'
 import RecordPicker from './RecordPicker'
 import { LIFECYCLE } from '../lifecycle'
 
@@ -31,14 +32,19 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
   const [ownerId, setOwnerId] = useState('')
   const [company, setCompany] = useState(null)
   const [members, setMembers] = useState([])
+  const [fieldDefs, setFieldDefs] = useState([])
+  const [custom, setCustom] = useState({})
 
-  useEffect(() => { getProjectMembers().then(setMembers).catch(() => {}) }, [])
+  useEffect(() => {
+    getProjectMembers().then(setMembers).catch(() => {})
+    getCustomFields('contact').then(setFieldDefs).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (leadId === null) {
       setName(''); setPhone(''); setEmail(''); setFacebook(''); setInstagram(''); setTiktok(''); setLink(''); setLocation('')
       setStage(stages[0]?.id || ''); setStatus('active'); setVerified('no'); setNotes(''); setPhoneValid(false); setSelectedTagIds(new Set())
-      setLifecycle('lead'); setOwnerId(''); setCompany(null)
+      setLifecycle('lead'); setOwnerId(''); setCompany(null); setCustom({})
       setLead(null)
     } else {
       (async () => {
@@ -51,7 +57,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
           setStatus(l.status || 'active'); setVerified(l.verified ? 'yes' : 'no')
           setNotes(l.notes || ''); setPhoneValid(!!l.phone_valid)
           setSelectedTagIds(new Set((l.tags || []).map(t => t.id)))
-          setLifecycle(l.lifecycle || 'lead'); setOwnerId(l.owner_id || ''); setCompany(l.company || null)
+          setLifecycle(l.lifecycle || 'lead'); setOwnerId(l.owner_id || ''); setCompany(l.company || null); setCustom(l.custom || {})
         } catch {}
         setLoading(false)
       })()
@@ -81,16 +87,16 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
       name: name.trim(), phone, email, facebook, instagram, tiktok, link, location, notes,
       stage_id: stage, status, verified: verified === 'yes', phone_valid: phoneValid,
       tag_ids: Array.from(selectedTagIds),
-      lifecycle, company_id: company?.id || null,
+      lifecycle, company_id: company?.id || null, custom,
     }
     if (ownerId || leadId) data.owner_id = ownerId || null
     try {
       if (leadId) {
         await updateLead(leadId, data)
-        showToast('Lead updated.')
+        showToast('Contact updated.')
       } else {
         await createLead(data)
-        showToast('Lead created.')
+        showToast('Contact created.')
       }
       close()
       refresh()
@@ -102,7 +108,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
     if (!confirm(`Delete "${lead.name}" permanently?`)) return
     try {
       await deleteLead(lead.id)
-      showToast('Lead deleted.')
+      showToast('Contact deleted.')
       close()
       refresh()
     } catch { showToast('Failed to delete.', true) }
@@ -113,7 +119,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
     if (!confirm(`Mark "${lead.name}" as dead?`)) return
     try {
       await updateLead(lead.id, { status: 'dead', dead_at: Date.now() })
-      showToast('Lead marked as dead.')
+      showToast('Contact moved to the dead list.')
       close()
       refresh()
     } catch { showToast('Failed.', true) }
@@ -236,6 +242,8 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
                 ) : <span className="text-xs text-zinc-400 dark:text-zinc-500">No phone entered</span>}
               </div>
             </div>
+            <CustomFieldInputs defs={fieldDefs} values={custom} members={members}
+              onChange={(k, v) => setCustom(c => ({ ...c, [k]: v }))} />
           </div>
 
           <div className="mt-6">

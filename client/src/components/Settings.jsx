@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   DownloadSimple, UploadSimple, FileCsv, ClipboardText,
-  Tag, WhatsappLogo, Signpost, GearSix, UsersThree, Lock, UserCircle, ChartLine, Kanban
+  Tag, WhatsappLogo, Signpost, GearSix, UsersThree, Lock, UserCircle, ChartLine, Kanban, SlidersHorizontal
 } from '@phosphor-icons/react'
 import { exportBackup, importBackup, exportCSV, getSettings, saveSetting, getStats } from '../api'
 import TagsView from './Tags'
@@ -12,6 +12,7 @@ import MessageTemplates from './MessageTemplates'
 import Accounts from './Accounts'
 import DashboardConfig from './DashboardConfig'
 import PipelineSettings from './PipelineSettings'
+import CustomFieldsSettings from './CustomFieldsSettings'
 import { can } from '../permissions'
 
 const TIMEZONES = [
@@ -32,6 +33,7 @@ const NAV = [
   { id: 'tags', label: 'Tags', icon: Tag, perms: ['tags.view', 'tags.edit'] },
   { id: 'stages', label: 'Stages', icon: Signpost, perms: ['stages.view', 'stages.edit'] },
   { id: 'pipelines', label: 'Pipelines', icon: Kanban, perms: ['settings.edit'] },
+  { id: 'fields', label: 'Custom fields', icon: SlidersHorizontal, perms: ['settings.edit'] },
   { id: 'whatsapp', label: 'WhatsApp', icon: WhatsappLogo, perms: ['whatsapp.view', 'whatsapp.control', 'templates.view', 'templates.edit'] },
   { id: 'team', label: 'Team', icon: UsersThree, perms: ['accounts.view', 'accounts.manage'] },
   { id: 'backup', label: 'Backup', icon: ClipboardText, perms: ['settings.edit'] },
@@ -138,6 +140,11 @@ export default function Settings({ user, ...props }) {
       case 'account': return <AccountProfile user={user} showToast={showToast} />
       case 'tags': return <TagsView {...props} />
       case 'stages': return <Stages {...props} />
+      case 'fields': return (
+        <Section title="Custom fields" desc="Extra fields for contacts, companies and deals. They appear in forms and tables and can be used as filters.">
+          <CustomFieldsSettings showToast={showToast} />
+        </Section>
+      )
       case 'pipelines': return (
         <Section title="Deal pipelines" desc="The stages deals move through. Win % drives the weighted forecast; 'Idle after' flags deals that stop moving.">
           <PipelineSettings showToast={showToast} />

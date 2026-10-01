@@ -4,7 +4,8 @@ import {
   MagnifyingGlass, Funnel, CheckCircle, XCircle, Trash,
   ArrowSquareOut, UserPlus, CaretRight, PaperPlaneTilt
 } from '@phosphor-icons/react'
-import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign, getProjectMembers } from '../api'
+import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign, getProjectMembers, getCustomFields } from '../api'
+import { formatCustomValue } from './CustomFieldInputs'
 import Pagination from './Pagination'
 import { LIFECYCLE } from '../lifecycle'
 import WhatsAppSend from './WhatsAppSend'
@@ -47,6 +48,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
   const [fLifecycle, setFLifecycle] = useState('')
   const [fOwner, setFOwner] = useState('')
   const [members, setMembers] = useState([])
+  const [fieldDefs, setFieldDefs] = useState([])
   const [showBulkLifecycle, setShowBulkLifecycle] = useState(false)
   const [showBulkOwner, setShowBulkOwner] = useState(false)
   const [selected, setSelected] = useState(new Set())
@@ -83,7 +85,10 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
 
   useEffect(() => { setPage(1) }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner])
 
-  useEffect(() => { getProjectMembers().then(setMembers).catch(() => {}) }, [])
+  useEffect(() => {
+    getProjectMembers().then(setMembers).catch(() => {})
+    getCustomFields('contact').then(setFieldDefs).catch(() => {})
+  }, [refreshId])
 
   const changeLimit = (n) => {
     setLimit(n)
@@ -360,6 +365,9 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Name</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Lifecycle</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Company</th>
+                  {fieldDefs.map(d => (
+                    <th key={d.id} className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider whitespace-nowrap">{d.label}</th>
+                  ))}
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Phone</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Email</th>
                   <th className="text-left py-3 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Links</th>
@@ -397,6 +405,9 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                       </span>
                     </td>
                     <td className="py-3 px-4 text-xs text-zinc-600 dark:text-zinc-400 max-w-[140px] truncate">{l.company?.name || '—'}</td>
+                    {fieldDefs.map(d => (
+                      <td key={d.id} className="py-3 px-4 text-xs text-zinc-600 dark:text-zinc-400 max-w-[160px] truncate">{formatCustomValue(d, l.custom?.[d.key], { members }) || '—'}</td>
+                    ))}
                     <td className="py-3 px-4">
                       <span className="text-xs text-zinc-700 dark:text-zinc-300">{l.phone || <span className="text-zinc-300 dark:text-zinc-600">&mdash;</span>}</span>
                       {l.phone && (

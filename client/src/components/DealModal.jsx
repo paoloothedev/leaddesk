@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X, Trash } from '@phosphor-icons/react'
-import { getDeal, createDeal, updateDeal, deleteDeal, getContacts, getCompanies, getProjectMembers } from '../api'
+import { getDeal, createDeal, updateDeal, deleteDeal, getContacts, getCompanies, getProjectMembers, getCustomFields } from '../api'
+import CustomFieldInputs from './CustomFieldInputs'
 import { formatDate, toDateInput, fromDateInput } from '../format'
 import RecordPicker from './RecordPicker'
 
@@ -22,6 +23,8 @@ export default function DealModal({ dealId, pipelines, defaults = {}, close, sho
   const [loading, setLoading] = useState(!!dealId)
   const [deal, setDeal] = useState(null)
   const [members, setMembers] = useState([])
+  const [fieldDefs, setFieldDefs] = useState([])
+  const [custom, setCustom] = useState({})
   const [busy, setBusy] = useState(false)
 
   const firstPipeline = pipelines[0]
@@ -39,6 +42,7 @@ export default function DealModal({ dealId, pipelines, defaults = {}, close, sho
 
   useEffect(() => {
     getProjectMembers().then(setMembers).catch(() => {})
+    getCustomFields('deal').then(setFieldDefs).catch(() => {})
     if (!dealId) return
     getDeal(dealId).then(d => {
       setDeal(d)
@@ -47,7 +51,7 @@ export default function DealModal({ dealId, pipelines, defaults = {}, close, sho
       setContact(d.contact ? { id: d.contact.id, name: d.contact.name } : null)
       setCompany(d.company ? { id: d.company.id, name: d.company.name } : null)
       setOwnerId(d.owner_id || ''); setExpectedClose(toDateInput(d.expected_close))
-      setLostReason(d.lost_reason || ''); setNotes(d.notes || '')
+      setLostReason(d.lost_reason || ''); setNotes(d.notes || ''); setCustom(d.custom || {})
     }).catch(() => { showToast('Could not load deal.', true); close() })
       .finally(() => setLoading(false))
   }, [dealId])
@@ -68,6 +72,7 @@ export default function DealModal({ dealId, pipelines, defaults = {}, close, sho
       company_id: company?.id || null,
       expected_close: fromDateInput(expectedClose),
       notes,
+      custom,
     }
     if (currency) data.currency = currency
     if (ownerId || dealId) data.owner_id = ownerId || null
@@ -165,6 +170,8 @@ export default function DealModal({ dealId, pipelines, defaults = {}, close, sho
                 {members.map(m => <option key={m.id} value={m.id}>{m.display_name || m.username}</option>)}
               </select>
             </div>
+            <CustomFieldInputs defs={fieldDefs} values={custom} members={members} currency={currency || deal?.currency || 'USD'}
+              onChange={(k, v) => setCustom(c => ({ ...c, [k]: v }))} />
             <div className="sm:col-span-2">
               <label className={label}>Notes</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}

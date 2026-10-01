@@ -62,15 +62,6 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Use can() from client/src/permissions.js for delete/verify/bulk/send buttons. API already 403s.
 
-### T-027 · Custom fields UI (settings + forms + table columns)
-- Status: TODO
-- Owner: —
-- Role: frontend
-- Priority: P1
-- Files: client/src/components/CustomFieldsSettings.jsx (new), CustomFieldInputs.jsx (new), LeadModal.jsx, DealModal.jsx, Settings.jsx, client/src/api.js
-- Depends on: T-025, T-023, T-024
-- Updated: 2026-10-01 01:15
-
 ### T-028 · Record pages: full-page contact / company / deal views
 - Status: TODO
 - Owner: —
@@ -92,6 +83,17 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-027 · Custom fields UI (settings + forms + table columns)
+- Status: DONE
+- Owner: lead-claude
+- Role: frontend
+- Priority: P1
+- Files: client/src/components/CustomFieldsSettings.jsx (new), CustomFieldInputs.jsx (new), LeadModal.jsx, DealModal.jsx, Settings.jsx, client/src/api.js
+- Depends on: T-025, T-023, T-024
+- Updated: 2026-10-01 02:16
+
+- Notes: Settings → Custom fields (per entity: add, rename, options, required, reorder, delete), CustomFieldInputs in contact + deal modals, custom columns in Contacts table. Verified in headless Chromium: created 4 contact fields + 1 deal field, filled them on a new contact, values saved typed and shown as columns. Filtering by custom field in the UI → part of T-030 saved views.
 
 ### T-024 · Deals UI: kanban board + pipeline settings
 - Status: DONE
