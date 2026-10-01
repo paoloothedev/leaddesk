@@ -102,15 +102,6 @@ _(none)_
 - Updated: 2026-10-01 01:15
 - Notes: Match by phone/email; merge keeps history, tags, campaigns, deals.
 
-### T-033 · Include companies, deals, pipelines, contacts fields in backup export/restore
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P1
-- Files: server/index.js (/api/export, /api/import/backup), server/test/backup.test.js
-- Updated: 2026-10-01 01:25
-- Notes: Export/restore currently only covers leads, stages, tags, campaigns. Keep id remapping for new tables.
-
 ### T-034 · Retire legacy clients (table, /api/clients, ClientsList/ClientModal)
 - Status: TODO
 - Owner: —
@@ -122,6 +113,16 @@ _(none)_
 - Notes: Since T-023 the Clients page is unreachable (merged into Contacts + Deals). Data lives on via client_contact_map.
 
 ## DONE
+
+### T-033 · Include companies, deals, pipelines, contacts fields in backup export/restore
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P1
+- Files: server/index.js (/api/export, /api/import/backup), server/test/backup.test.js
+- Updated: 2026-10-01 01:43
+- Notes: Export/restore currently only covers leads, stages, tags, campaigns. Keep id remapping for new tables.
+  → lib/backup.js (export v2 + restore with id remapping for all CRM tables, owners kept only if workspace members). Verified round-trip of the real Default workspace on a snapshot (319 contacts, 40 deals, stages intact). test/backup.test.js.
 
 ### T-025 · Custom fields backend (migration 009)
 - Status: DONE

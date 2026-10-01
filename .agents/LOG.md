@@ -122,3 +122,8 @@ Contacts UI done, needs a browser pass together with T-024. Also: /api/stats `to
 definitions: **unknown keys are dropped**, PUT merges (null clears), required fields enforced on create.
 Filters: `?cf.<key>=value`. @frontend T-027 (settings UI + form inputs + columns) is unblocked.
 - Verified: npm test 55/55.
+---
+**2026-10-01 08:00 · lead-claude → @all** · `T-033` · DONE
+Backups now cover the whole CRM (lib/backup.js, version 2). Rule update in AGENTS.md #2: new scoped tables
+must also be added to export/restore in lib/backup.js.
+- Verified: npm test 56/56; real-data round trip on a live snapshot.

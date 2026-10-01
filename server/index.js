@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { getDB, logAudit, seedStagesForProject } from './db.js';
-import crypto from 'crypto';
+import { getDB, logAudit } from './db.js';
+import { exportProject, restoreProject } from './lib/backup.js';
 import leadsRouter from './routes/leads.js';
 import stagesRouter from './routes/stages.js';
 import campaignsRouter from './routes/campaigns.js';
@@ -207,101 +207,21 @@ app.get('/api/audit-log', resolveProject, requirePermission('settings.view', 'da
 });
 
 app.get('/api/export', resolveProject, requirePermission('settings.edit'), (req, res) => {
-  const db = getDB();
-  const pid = req.project.id;
-  const leads = db.prepare('SELECT * FROM leads WHERE project_id = ?').all(pid);
-  const campaigns = db.prepare('SELECT * FROM campaigns WHERE project_id = ?').all(pid);
-  const stages = db.prepare('SELECT * FROM stages WHERE project_id = ? ORDER BY sort_order').all(pid);
-  const campaign_leads = db.prepare(`
-    SELECT cl.* FROM campaign_leads cl
-    INNER JOIN campaigns c ON c.id = cl.campaign_id
-    WHERE c.project_id = ?
-  `).all(pid);
-  const stage_history = db.prepare(`
-    SELECT sh.* FROM stage_history sh
-    INNER JOIN leads l ON l.id = sh.lead_id
-    WHERE l.project_id = ?
-  `).all(pid);
-  const tags = db.prepare('SELECT * FROM tags WHERE project_id = ?').all(pid);
-  const lead_tags = db.prepare(`
-    SELECT lt.* FROM lead_tags lt
-    INNER JOIN leads l ON l.id = lt.lead_id
-    WHERE l.project_id = ?
-  `).all(pid);
-  res.json({ leads, campaigns, stages, campaign_leads, stage_history, tags, lead_tags });
+  res.json(exportProject(getDB(), req.project.id));
 });
 
 app.post('/api/import/backup', resolveProject, requirePermission('settings.edit'), (req, res) => {
   const db = getDB();
   const pid = req.project.id;
-  const data = req.body;
-  if (!data || !Array.isArray(data.leads)) return res.status(400).json({ error: 'Invalid backup file' });
-
-  // Every restored row gets a fresh id, so a backup from another workspace (or install) can never
-  // collide with existing rows. Maps translate old ids → new ids for the join tables.
-  const newId = (prefix) => prefix + '_' + crypto.randomBytes(6).toString('hex');
-  const stageMap = new Map(), leadMap = new Map(), campMap = new Map(), tagMap = new Map();
-
-  const restore = db.transaction(() => {
-    // Wipe only this project's data (children first)
-    db.prepare('DELETE FROM lead_tags WHERE lead_id IN (SELECT id FROM leads WHERE project_id = ?)').run(pid);
-    db.prepare('DELETE FROM stage_history WHERE lead_id IN (SELECT id FROM leads WHERE project_id = ?)').run(pid);
-    db.prepare('DELETE FROM campaign_leads WHERE campaign_id IN (SELECT id FROM campaigns WHERE project_id = ?)').run(pid);
-    for (const t of ['leads', 'campaigns', 'stages', 'tags']) {
-      db.prepare(`DELETE FROM ${t} WHERE project_id = ?`).run(pid);
-    }
-
-    const insertStage = db.prepare('INSERT INTO stages (id, name, color, sort_order, project_id) VALUES (?, ?, ?, ?, ?)');
-    for (const s of data.stages || []) {
-      const id = newId('stage');
-      stageMap.set(s.id, id);
-      insertStage.run(id, s.name || 'Stage', s.color || '#3d5a45', s.sort_order || 0, pid);
-    }
-    if (!stageMap.size) seedStagesForProject(pid);
-    const fallbackStage = db.prepare('SELECT id FROM stages WHERE project_id = ? ORDER BY sort_order LIMIT 1').get(pid).id;
-
-    const insertLead = db.prepare(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status, verified, stage_id, created_at, dead_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    for (const l of data.leads) {
-      const id = newId('lead');
-      leadMap.set(l.id, id);
-      insertLead.run(id, l.name || '', l.phone || '', l.phone_valid ? 1 : 0, l.email || '', l.facebook || '', l.instagram || '', l.tiktok || '', l.link || '', l.location || '', l.notes || '', l.status === 'dead' ? 'dead' : 'active', l.verified ? 1 : 0, stageMap.get(l.stage_id) || fallbackStage, l.created_at || Date.now(), l.dead_at || null, pid);
-    }
-
-    const insertCamp = db.prepare('INSERT INTO campaigns (id, name, created_at, project_id) VALUES (?, ?, ?, ?)');
-    for (const c of data.campaigns || []) {
-      const id = newId('camp');
-      campMap.set(c.id, id);
-      insertCamp.run(id, c.name || 'Campaign', c.created_at || Date.now(), pid);
-    }
-
-    const insertTag = db.prepare('INSERT INTO tags (id, name, color, created_at, project_id) VALUES (?, ?, ?, ?, ?)');
-    for (const t of data.tags || []) {
-      const id = newId('tag');
-      tagMap.set(t.id, id);
-      insertTag.run(id, t.name || 'Tag', t.color || '#3d5a45', t.created_at || Date.now(), pid);
-    }
-
-    const insertCL = db.prepare('INSERT OR IGNORE INTO campaign_leads (lead_id, campaign_id) VALUES (?, ?)');
-    for (const cl of data.campaign_leads || []) {
-      if (leadMap.has(cl.lead_id) && campMap.has(cl.campaign_id)) insertCL.run(leadMap.get(cl.lead_id), campMap.get(cl.campaign_id));
-    }
-    const insertSH = db.prepare('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
-    for (const sh of data.stage_history || []) {
-      if (leadMap.has(sh.lead_id)) insertSH.run(leadMap.get(sh.lead_id), stageMap.get(sh.stage_id) || fallbackStage, sh.at || Date.now());
-    }
-    const insertLT = db.prepare('INSERT OR IGNORE INTO lead_tags (lead_id, tag_id) VALUES (?, ?)');
-    for (const lt of data.lead_tags || []) {
-      if (leadMap.has(lt.lead_id) && tagMap.has(lt.tag_id)) insertLT.run(leadMap.get(lt.lead_id), tagMap.get(lt.tag_id));
-    }
-  });
-
+  if (!req.body || !Array.isArray(req.body.leads)) return res.status(400).json({ error: 'Invalid backup file' });
+  let counts;
   try {
-    restore();
+    counts = db.transaction(() => restoreProject(db, pid, req.body))();
   } catch (err) {
     return res.status(400).json({ error: 'Restore failed, nothing was changed: ' + err.message });
   }
-  logAudit('restore', 'project', pid, req.project.name, { leads: leadMap.size, stages: stageMap.size, tags: tagMap.size, campaigns: campMap.size }, pid);
-  res.json({ ok: true, leads: leadMap.size });
+  logAudit('restore', 'project', pid, req.project.name, counts, pid);
+  res.json({ ok: true, ...counts });
 });
 
 // CSV export

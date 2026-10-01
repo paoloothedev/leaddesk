@@ -42,3 +42,32 @@ test('invalid backup is rejected without wiping data', async () => {
   assert.equal((await B.post('/import/backup', { nope: true })).status, 400);
   assert.equal((await B.get('/leads')).body.length, before);
 });
+
+test('backup round-trips companies, deals, pipelines, custom fields and templates', async () => {
+  await A.post('/custom-fields', { entity: 'contact', label: 'Seats', type: 'number' });
+  const co = (await A.post('/companies', { name: 'Acme' })).body.id;
+  const contact = (await A.post('/contacts', { name: 'Gamma', phone: '201000000014', company_id: co, lifecycle: 'qualified', custom: { seats: 12 } })).body.id;
+  const won = (await A.get('/pipelines')).body[0].stages.find(s => s.kind === 'won').id;
+  await A.post('/deals', { title: 'Big deal', value: 900, contact_id: contact, stage_id: won });
+  await A.post('/templates', { name: 'Hello', content: 'Hi {{name}}' });
+
+  const backup = (await A.get('/export')).body;
+  assert.equal(backup.version, 2);
+  const r = await B.post('/import/backup', backup);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.deals, 1);
+
+  const bContact = (await B.get('/contacts?search=Gamma')).body[0];
+  assert.equal(bContact.lifecycle, 'customer', 'won deal made the contact a customer in A; restored as-is');
+  assert.equal(bContact.custom.seats, 12);
+  assert.equal(bContact.company.name, 'Acme');
+  assert.notEqual(bContact.company.id, co, 'fresh company id');
+  const deals = (await B.get('/deals')).body;
+  assert.equal(deals.length, 1);
+  assert.equal(deals[0].status, 'won');
+  assert.equal(deals[0].contact.id, bContact.id);
+  assert.equal((await B.get(`/deals/${deals[0].id}`)).body.history.length, 1);
+  assert.equal((await B.get('/custom-fields?entity=contact')).body[0].key, 'seats');
+  assert.ok((await B.get('/templates')).body.some(t => t.name === 'Hello'));
+  assert.equal((await A.get('/deals')).body.length, 1, 'source workspace untouched');
+});

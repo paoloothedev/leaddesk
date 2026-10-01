@@ -111,7 +111,7 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/clients` | routes/clients.js | GET (optional `page`/`limit`; filters search, status, stage, assigned, tag), GET /:id, POST, PUT /:id, DELETE /:id, POST /:id/activity |
 | `/email-campaigns` | routes/emailCampaigns.js | CRUD + lead membership |
 | `/gmaps` | routes/gmaps.js | POST /scrape, GET /jobs, GET/DELETE /jobs/:id, GET /jobs/:id/download, POST /jobs/:id/import |
-| inline | index.js | GET /stats, GET /import-logs, GET /audit-log, GET /export (JSON backup), POST /import/backup (one transaction: wipes project, restores with fresh ids — works across workspaces), GET /export/csv |
+| inline | index.js | GET /stats, GET /import-logs, GET /audit-log, GET /export (JSON backup v2 via `lib/backup.js`: contacts, companies, stages, tags, campaigns, pipelines, deals + history, custom fields, templates), POST /import/backup (one transaction: wipes the workspace's CRM data, restores with fresh ids — works across workspaces; v1 backups still accepted), GET /export/csv |
 
 ### Socket.IO (index.js ↔ WhatsAppPage.jsx)
 Client → server: `join_project(projectId)`, `leave_project`, `wa_init {projectId}`, `wa_disconnect {projectId}`,
