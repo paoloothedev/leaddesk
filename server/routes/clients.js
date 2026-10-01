@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDB, logAudit } from '../db.js';
 import { ownedIds, isOwned } from '../lib/scope.js';
+import { pageParams, runPaged, groupBy, sendList } from '../lib/paginate.js';
 import { authMiddleware, requirePermission } from './auth.js';
 import crypto from 'crypto';
 
@@ -10,13 +11,14 @@ router.use(authMiddleware);
 router.get('/', requirePermission('leads.view'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
-  const { search, status, assigned, tag, sortBy, sortOrder } = req.query;
+  const { search, status, stage, assigned, tag, sortBy, sortOrder } = req.query;
 
   let sql = 'SELECT * FROM clients WHERE project_id = ?';
   const params = [projectId];
 
   if (search) { sql += ' AND (name LIKE ? OR phone LIKE ? OR email LIKE ?)'; const s = `%${search}%`; params.push(s, s, s); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
+  if (stage) { sql += ' AND stage = ?'; params.push(stage); }
   if (assigned) { sql += ' AND assigned_to = ?'; params.push(assigned); }
 
   if (tag) {
@@ -30,14 +32,17 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
   const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
   sql += ` ORDER BY ${col} ${order}`;
 
-  const clients = db.prepare(sql).all(...params);
+  const paging = pageParams(req.query);
+  const { rows: clients, total } = runPaged(db, sql, params, paging);
 
-  const getTags = db.prepare('SELECT t.* FROM tags t INNER JOIN client_tags ct ON ct.tag_id = t.id WHERE ct.client_id = ?');
-  for (const c of clients) {
-    c.tags = getTags.all(c.id);
-  }
+  const tagsBy = groupBy(db, clients.map(c => c.id), ph => `
+    SELECT ct.client_id AS k, t.* FROM tags t
+    INNER JOIN client_tags ct ON ct.tag_id = t.id
+    WHERE ct.client_id IN (${ph})
+  `);
+  for (const c of clients) c.tags = tagsBy.get(c.id) || [];
 
-  res.json(clients);
+  sendList(res, clients, total, paging);
 });
 
 router.get('/:id', requirePermission('leads.view'), (req, res) => {

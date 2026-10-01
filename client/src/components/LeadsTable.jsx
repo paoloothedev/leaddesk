@@ -5,6 +5,7 @@ import {
   ArrowSquareOut, UserPlus, CaretRight, PaperPlaneTilt
 } from '@phosphor-icons/react'
 import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign } from '../api'
+import Pagination from './Pagination'
 import WhatsAppSend from './WhatsAppSend'
 
 function socialLinks(l) {
@@ -30,6 +31,9 @@ const rowVariants = {
 
 export default function LeadsTable({ stages, tags, campaigns, refreshId, openLeadModal, showToast, refresh, goView }) {
   const [leads, setLeads] = useState([])
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(() => Number(localStorage.getItem('leadsPageSize')) || 50)
+  const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
   const [fVerified, setFVerified] = useState('')
   const [fPhone, setFPhone] = useState('')
@@ -59,11 +63,23 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
         if (fTagNot) params.tagNot = joined
         else { params.tag = joined; params.tagMode = fTagMode }
       }
+      params.page = page
+      params.limit = limit
       const data = await getLeads(params)
-      setLeads(data)
+      if (!data.items.length && page > 1) { setPage(p => p - 1); return }
+      setLeads(data.items)
+      setTotal(data.total)
       setSelected(new Set())
     } catch {}
-  }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode])
+  }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, page, limit])
+
+  useEffect(() => { setPage(1) }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode])
+
+  const changeLimit = (n) => {
+    setLimit(n)
+    setPage(1)
+    try { localStorage.setItem('leadsPageSize', String(n)) } catch {}
+  }
 
   useEffect(() => { loadLeads() }, [loadLeads, refreshId])
 
@@ -387,6 +403,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
           </div>
         </div>
       )}
+      <Pagination page={page} limit={limit} total={total} onPage={setPage} onLimit={changeLimit} />
     </div>
   )
 }

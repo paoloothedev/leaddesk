@@ -1,25 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Trash, CaretUp, CaretDown, Signpost } from '@phosphor-icons/react'
-import { createStage, updateStage, deleteStage, reorderStages, getLeads } from '../api'
+import { createStage, updateStage, deleteStage, reorderStages } from '../api'
 
 export default function Stages({ stages, loadStages, refreshId, showToast, refresh }) {
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState('#3d5a45')
-  const [leadCounts, setLeadCounts] = useState({})
-
   useEffect(() => { loadStages() }, [loadStages, refreshId])
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await getLeads({ status: 'active' })
-        const counts = {}
-        for (const l of data) counts[l.stage_id] = (counts[l.stage_id] || 0) + 1
-        setLeadCounts(counts)
-      } catch {}
-    })()
-  }, [refreshId])
 
   const handleAdd = async () => {
     if (!newName.trim()) { showToast('Enter a stage name.', true); return }
@@ -77,7 +64,7 @@ export default function Stages({ stages, loadStages, refreshId, showToast, refre
                 className="w-7 h-7 rounded-lg cursor-pointer border-0 bg-transparent shrink-0" />
               <input type="text" value={s.name} onChange={e => handleUpdate(s.id, { name: e.target.value })}
                 className="flex-1 bg-transparent border-0 text-sm text-zinc-900 dark:text-zinc-100 outline-none placeholder-zinc-400 dark:placeholder-zinc-500" />
-              <span className="text-xs text-zinc-400 dark:text-zinc-500 font-mono tabular-nums w-10 text-right">{leadCounts[s.id] || 0}</span>
+              <span className="text-xs text-zinc-400 dark:text-zinc-500 font-mono tabular-nums w-10 text-right">{s.lead_count || 0}</span>
               <div className="flex gap-0.5">
                 <button onClick={() => handleReorder(s.id, 'up')} disabled={i === 0}
                   className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-20 disabled:cursor-not-allowed transition-colors">

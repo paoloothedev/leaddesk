@@ -6,7 +6,10 @@ const router = Router();
 
 router.get('/', (req, res) => {
   const db = getDB();
-  const stages = db.prepare('SELECT * FROM stages WHERE project_id = ? ORDER BY sort_order').all(req.project.id);
+  const stages = db.prepare(`
+    SELECT s.*, (SELECT COUNT(*) FROM leads l WHERE l.stage_id = s.id AND l.project_id = s.project_id AND l.status = 'active') AS lead_count
+    FROM stages s WHERE s.project_id = ? ORDER BY s.sort_order
+  `).all(req.project.id);
   res.json(stages);
 });
 

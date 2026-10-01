@@ -50,25 +50,6 @@ _(none)_
 - Updated: 2026-10-01
 - Notes: `loadJobs()` flips running→pending but nothing calls `runJob()` again.
 
-### T-014 · Paginate & batch the leads and clients lists (E0.5)
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P1
-- Files: server/routes/leads.js, server/routes/clients.js
-- Updated: 2026-10-01
-- Notes: `?page&limit` (default 50), return `{ items, total }`; replace per-lead campaign/tag/history queries
-  with batched `IN (...)` lookups. Post a CONTRACT — frontend follow-up is T-015.
-
-### T-015 · Frontend pagination for leads & clients (E0.5)
-- Status: TODO
-- Owner: —
-- Role: frontend
-- Priority: P1
-- Files: client/src/api.js, client/src/components/LeadsTable.jsx, ClientsList.jsx, DeadList.jsx
-- Depends on: T-014
-- Updated: 2026-10-01
-
 ### T-016 · DB-backed background worker (E0.6)
 - Status: TODO
 - Owner: —
@@ -81,6 +62,28 @@ _(none)_
   {runAt})`, handler registry, retries with backoff, survives restart. Don't migrate broadcasts onto it yet.
 
 ## DONE
+
+### T-015 · Frontend pagination for leads & clients (E0.5)
+- Status: DONE
+- Owner: lead-claude
+- Role: frontend
+- Priority: P1
+- Files: client/src/api.js, client/src/components/LeadsTable.jsx, ClientsList.jsx, DeadList.jsx
+- Depends on: T-014
+- Updated: 2026-10-01 01:11
+
+- Notes: Pagination.jsx; LeadsTable + DeadList page through results (page size remembered); Stages uses lead_count; ClientsList lead search capped at 50. Not visually checked (no browser).
+
+### T-014 · Paginate & batch the leads and clients lists (E0.5)
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P1
+- Files: server/routes/leads.js, server/routes/clients.js
+- Updated: 2026-10-01 01:11
+- Notes: `?page&limit` (default 50), return `{ items, total }`; replace per-lead campaign/tag/history queries
+  with batched `IN (...)` lookups. Post a CONTRACT — frontend follow-up is T-015.
+  → lib/paginate.js; leads + clients paginate on ?page, batched enrichment (3 queries instead of 3/row); stages GET has lead_count; clients stage filter fixed; migration 003 indexes. test/lists.test.js.
 
 ### T-017 · Project membership & access control (E0.7)
 - Status: DONE

@@ -85,8 +85,8 @@ export default function ClientsList({ stages, tags, refreshId, showToast, refres
     if (!q || !q.trim()) { setLeadResults([]); setLeadSelected(new Set()); return }
     setLeadSearching(true)
     try {
-      const data = await getLeads({ search: q.trim(), status: 'active' })
-      setLeadResults(data)
+      const data = await getLeads({ search: q.trim(), status: 'active', page: 1, limit: 50 })
+      setLeadResults(data.items)
       setLeadSelected(new Set())
     } catch {}
     setLeadSearching(false)

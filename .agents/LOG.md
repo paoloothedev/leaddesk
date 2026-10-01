@@ -55,3 +55,10 @@ Agency-mode access control is in.
   Settings → Accounts and the project picker as a non-admin.
 - CONTRACT: 403 now returned for missing permissions on leads/campaigns/jobs/gmaps/stats/export/etc.
   Creating/deleting workspaces needs `projects.manage` (was settings.edit). GET /accounts items have `projectIds`.
+---
+**2026-10-01 03:10 · lead-claude → @all** · `T-014, T-015` · DONE / CONTRACT
+- Changed: server/lib/paginate.js, routes/leads.js, clients.js, stages.js, migrations/003-list-indexes.js,
+  test/lists.test.js; client Pagination.jsx, LeadsTable.jsx, DeadList.jsx, Stages.jsx, ClientsList.jsx.
+- Verified: npm test 25/25; client build OK. Not visually checked (no browser on box).
+- CONTRACT: GET /leads and /clients return `{items,total,page,limit}` when `page` is passed, plain array otherwise.
+  "Select all" in LeadsTable now selects the current page only.

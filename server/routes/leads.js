@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requirePermission, hasPermission } from './auth.js';
 import { getDB, logAudit, DB_PATH } from '../db.js';
 import { ownedIds, isOwned } from '../lib/scope.js';
+import { pageParams, runPaged, groupBy, sendList } from '../lib/paginate.js';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
@@ -87,30 +88,32 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
   const dir = sortOrder === 'asc' ? 'ASC' : 'DESC';
   sql += ` ORDER BY ${col} ${dir}`;
 
-  const leads = db.prepare(sql).all(...params);
+  const paging = pageParams(req.query);
+  const { rows: leads, total } = runPaged(db, sql, params, paging);
 
-  const getCampaigns = db.prepare(`
-    SELECT c.id, c.name FROM campaigns c
+  const ids = leads.map(l => l.id);
+  const campaignsBy = groupBy(db, ids, ph => `
+    SELECT cl.lead_id AS k, c.id, c.name FROM campaigns c
     INNER JOIN campaign_leads cl ON cl.campaign_id = c.id
-    WHERE cl.lead_id = ?
+    WHERE cl.lead_id IN (${ph})
   `);
-  const getStageHistory = db.prepare('SELECT * FROM stage_history WHERE lead_id = ? ORDER BY at DESC');
-  const getLeadTags = db.prepare(`
-    SELECT t.id, t.name, t.color FROM tags t
+  const historyBy = groupBy(db, ids, ph => `SELECT lead_id AS k, * FROM stage_history WHERE lead_id IN (${ph}) ORDER BY at DESC`);
+  const tagsBy = groupBy(db, ids, ph => `
+    SELECT lt.lead_id AS k, t.id, t.name, t.color FROM tags t
     INNER JOIN lead_tags lt ON lt.tag_id = t.id
-    WHERE lt.lead_id = ?
+    WHERE lt.lead_id IN (${ph})
   `);
 
   const enriched = leads.map(l => ({
     ...l,
     verified: !!l.verified,
     phone_valid: !!l.phone_valid,
-    campaigns: getCampaigns.all(l.id),
-    stageHistory: getStageHistory.all(l.id),
-    tags: getLeadTags.all(l.id),
+    campaigns: campaignsBy.get(l.id) || [],
+    stageHistory: historyBy.get(l.id) || [],
+    tags: tagsBy.get(l.id) || [],
   }));
 
-  res.json(enriched);
+  sendList(res, enriched, total, paging);
 });
 
 // Get single lead

@@ -91,14 +91,14 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/auth` | routes/auth.js | POST login, POST logout, GET me, GET permissions |
 | `/projects` | routes/projects.js | GET / (member workspaces + counts), POST / (`projects.manage`), PUT /:id, DELETE /:id (`projects.manage`; cascade delete + removes WA auth dir) |
 | `/accounts` | routes/accounts.js | GET/PUT me, GET / (self + created accounts; includes `projectIds`), POST /, PUT /:id (`permissions`, `projectIds`), DELETE /:id, POST /:id/change-password |
-| `/leads` | routes/leads.js | GET / (filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder), GET/PUT/DELETE /:id, POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert), POST /import/preview (multer CSV), POST /import/confirm |
-| `/stages` | routes/stages.js | CRUD + POST /reorder |
+| `/leads` | routes/leads.js | GET / (optional `page`/`limit` → `{items,total,page,limit}`, else array; filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder), GET/PUT/DELETE /:id, POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert), POST /import/preview (multer CSV), POST /import/confirm |
+| `/stages` | routes/stages.js | CRUD (GET includes `lead_count`) + POST /reorder |
 | `/tags` | routes/tags.js | CRUD (GET includes lead_count) |
 | `/templates` | routes/templates.js | CRUD |
 | `/campaigns` | routes/campaigns.js | GET, POST, DELETE /:id, POST /:id/leads, DELETE /:id/leads/:leadId, GET /:id/eligible |
 | `/jobs` | routes/jobs.js | POST / (create broadcast), GET /, GET /daily-status, GET /:id, POST /:id/pause|resume|stop, DELETE /:id |
 | `/settings` | routes/settings.js | GET (object), PUT {key,value} |
-| `/clients` | routes/clients.js | GET, GET /:id, POST, PUT /:id, DELETE /:id, POST /:id/activity |
+| `/clients` | routes/clients.js | GET (optional `page`/`limit`; filters search, status, stage, assigned, tag), GET /:id, POST, PUT /:id, DELETE /:id, POST /:id/activity |
 | `/email-campaigns` | routes/emailCampaigns.js | CRUD + lead membership |
 | `/gmaps` | routes/gmaps.js | POST /scrape, GET /jobs, GET/DELETE /jobs/:id, GET /jobs/:id/download, POST /jobs/:id/import |
 | inline | index.js | GET /stats, GET /import-logs, GET /audit-log, GET /export (JSON backup), POST /import/backup (one transaction: wipes project, restores with fresh ids — works across workspaces), GET /export/csv |
@@ -148,6 +148,9 @@ and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin).
   directory there. Should mount a directory and make the DB path configurable.
 
 ## 5. Conventions cheat-sheet
+
+- Lists: use `lib/paginate.js` (`pageParams`, `runPaged`, `groupBy` for batched enrichment, `sendList`). Never
+  run a query per row. New list endpoints should always paginate.
 
 - IDs: `crypto.randomBytes(n).toString('hex')`, `crypto.randomUUID()`, or `prefix_` + base36 — follow the
   neighbouring code in the file you touch.

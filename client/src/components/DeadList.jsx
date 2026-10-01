@@ -5,6 +5,7 @@ import {
   CaretRight, Skull
 } from '@phosphor-icons/react'
 import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign } from '../api'
+import Pagination from './Pagination'
 
 const rowVariants = {
   hidden: { opacity: 0, y: 8 },
@@ -16,6 +17,9 @@ const rowVariants = {
 
 export default function DeadList({ stages, tags, campaigns, refreshId, openLeadModal, showToast, refresh }) {
   const [leads, setLeads] = useState([])
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(() => Number(localStorage.getItem('leadsPageSize')) || 50)
+  const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
   const [fPhone, setFPhone] = useState('')
   const [fVerified, setFVerified] = useState('')
@@ -41,11 +45,23 @@ export default function DeadList({ stages, tags, campaigns, refreshId, openLeadM
       }
       params.sortBy = sortBy
       params.sortOrder = sortOrder
+      params.page = page
+      params.limit = limit
       const data = await getLeads(params)
-      setLeads(data)
+      if (!data.items.length && page > 1) { setPage(p => p - 1); return }
+      setLeads(data.items)
+      setTotal(data.total)
       setSelected(new Set())
     } catch {}
-  }, [search, fPhone, fVerified, fTag, fTagNot, sortBy, sortOrder])
+  }, [search, fPhone, fVerified, fTag, fTagNot, sortBy, sortOrder, page, limit])
+
+  useEffect(() => { setPage(1) }, [search, fPhone, fVerified, fTag, fTagNot, sortBy, sortOrder])
+
+  const changeLimit = (n) => {
+    setLimit(n)
+    setPage(1)
+    try { localStorage.setItem('leadsPageSize', String(n)) } catch {}
+  }
 
   useEffect(() => { loadDead() }, [loadDead, refreshId])
 
@@ -314,6 +330,7 @@ export default function DeadList({ stages, tags, campaigns, refreshId, openLeadM
           </div>
         </div>
       )}
+      <Pagination page={page} limit={limit} total={total} onPage={setPage} onLimit={changeLimit} />
     </div>
   )
 }
