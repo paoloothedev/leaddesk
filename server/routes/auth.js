@@ -16,6 +16,7 @@ const ALL_PERMISSIONS = [
   'whatsapp.view', 'whatsapp.control',
   'accounts.view', 'accounts.manage',
   'broadcast.view', 'broadcast.manage',
+  'projects.manage',
 ];
 
 const SESSION_DAYS = 30;
@@ -59,6 +60,10 @@ export function authMiddleware(req, res, next) {
   if (!user) return res.status(401).json({ error: 'Session expired' });
   req.user = user;
   next();
+}
+
+export function hasPermission(user, perm) {
+  return !!user && (user.role === 'admin' || user.permissions.includes(perm));
 }
 
 export function requirePermission(...perms) {

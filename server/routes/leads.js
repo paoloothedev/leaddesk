@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission, hasPermission } from './auth.js';
 import { getDB, logAudit, DB_PATH } from '../db.js';
 import { ownedIds, isOwned } from '../lib/scope.js';
 import multer from 'multer';
@@ -22,7 +23,7 @@ try {
 } catch {}
 
 // List leads
-router.get('/', (req, res) => {
+router.get('/', requirePermission('leads.view'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder } = req.query;
@@ -113,7 +114,7 @@ router.get('/', (req, res) => {
 });
 
 // Get single lead
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('leads.view'), (req, res) => {
   const db = getDB();
   const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!lead) return res.status(404).json({ error: 'Not found' });
@@ -132,7 +133,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create lead
-router.post('/', (req, res) => {
+router.post('/', requirePermission('leads.edit'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { id, name, phone, email, facebook, instagram, tiktok, link, location, notes, status, verified, tag_ids } = req.body;
@@ -173,7 +174,7 @@ router.post('/', (req, res) => {
 });
 
 // Update lead
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('leads.edit'), (req, res) => {
   const db = getDB();
   const existing = db.prepare('SELECT * FROM leads WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
@@ -217,7 +218,7 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete lead
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('leads.delete'), (req, res) => {
   const db = getDB();
   const existing = db.prepare('SELECT id, name FROM leads WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   db.prepare('DELETE FROM leads WHERE id = ? AND project_id = ?').run(req.params.id, req.project.id);
@@ -226,12 +227,14 @@ router.delete('/:id', (req, res) => {
 });
 
 // Bulk actions
-router.post('/bulk', (req, res) => {
+router.post('/bulk', requirePermission('leads.edit', 'leads.verify', 'leads.delete'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { ids, action, stageId, tagId } = req.body;
   if (!ids || !ids.length) return res.status(400).json({ error: 'No IDs' });
   const now = Date.now();
+  const needed = action === 'verify' ? 'leads.verify' : action === 'delete' ? 'leads.delete' : 'leads.edit';
+  if (!hasPermission(req.user, needed)) return res.status(403).json({ error: 'Permission denied' });
   if (action === 'stage' && !isOwned('stages', projectId, stageId)) return res.status(400).json({ error: 'Invalid stage' });
   if ((action === 'tag' || action === 'untag') && !isOwned('tags', projectId, tagId)) return res.status(400).json({ error: 'Invalid tag' });
 
@@ -274,7 +277,7 @@ router.post('/bulk', (req, res) => {
 });
 
 // Import preview (CSV upload)
-router.post('/import/preview', upload.single('file'), (req, res) => {
+router.post('/import/preview', requirePermission('leads.import'), upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const text = req.file.buffer.toString('utf-8');
   const records = parseCSV(text);
@@ -282,7 +285,7 @@ router.post('/import/preview', upload.single('file'), (req, res) => {
 });
 
 // Import confirm — with update mode
-router.post('/import/confirm', async (req, res) => {
+router.post('/import/confirm', requirePermission('leads.import'), async (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { rows, skipDupes, updateMode, checkWhatsApp, filename } = req.body;

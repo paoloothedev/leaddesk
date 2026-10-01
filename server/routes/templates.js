@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission } from './auth.js';
 import { getDB } from '../db.js';
 
 const router = Router();
@@ -15,7 +16,7 @@ router.get('/', (req, res) => {
 });
 
 // Create template
-router.post('/', (req, res) => {
+router.post('/', requirePermission('templates.edit'), (req, res) => {
   const db = getDB();
   const { name, content } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
@@ -27,7 +28,7 @@ router.post('/', (req, res) => {
 });
 
 // Update template
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('templates.edit'), (req, res) => {
   const db = getDB();
   const existing = db.prepare('SELECT * FROM message_templates WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
@@ -42,7 +43,7 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete template
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('templates.edit'), (req, res) => {
   const db = getDB();
   db.prepare('DELETE FROM message_templates WHERE id = ? AND project_id = ?').run(req.params.id, req.project.id);
   res.json({ ok: true });

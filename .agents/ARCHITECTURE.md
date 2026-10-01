@@ -22,15 +22,20 @@ api.js request()                                  cookie parser (inline, sets re
 - **authMiddleware** (`routes/auth.js`): reads cookie `lead_session` → `sessions` → `accounts`, sets
   `req.user = { id, username, display_name, email, role, parent_id, permissions[] }`. Sessions last 30 days.
 - **requirePermission(...perms)**: admin role bypasses; otherwise user needs *any* of the listed perms.
-  Permission list: `ALL_PERMISSIONS` in `routes/auth.js`. ⚠ Only some routers use it (clients, emailCampaigns,
-  projects, accounts). leads/campaigns/jobs/tags/stages/templates/settings do not check permissions.
+  `hasPermission(user, perm)` for checks inside handlers (e.g. bulk actions). Permission list: `ALL_PERMISSIONS`
+  in `routes/auth.js` (includes `projects.manage` for creating/deleting workspaces). **Every** project route is
+  gated: reads of reference data (stages, tags, templates, settings) are open to any member; primary data and
+  all writes need the matching permission.
+- **Agency mode / membership** (migration 002): `project_members(project_id, account_id)`. Admins
+  (`role = 'admin'`, the agency owner) see every workspace; everyone else only workspaces they are members of.
+  Accounts are assigned to workspaces via `projectIds` on `POST/PUT /api/accounts`. Non-admins can only manage
+  accounts they created (`parent_id`), grant permissions they hold, and assign workspaces they can access.
 - **Ownership helpers** (`lib/scope.js`): `ownedIds(table, projectId, ids)` filters foreign ids out,
   `isOwned(table, projectId, id)` for single ids. Covered by `test/isolation.test.js`.
 - **canAccessProject(user, projectId)** (`middleware/project.js`): the single place for workspace access rules,
   used by HTTP and sockets.
 - **resolveProject** (`middleware/project.js`): project id from `X-Project-Id` header or `?project=` →
-  `req.project` (full row). 400 if missing, 404 if unknown. It does **not** check the user has access to
-  that project — all logged-in users see all projects.
+  `req.project` (full row) via `canAccessProject`. 400 if missing, 404 if unknown **or not a member**.
 
 ### Frontend project context
 
@@ -84,8 +89,8 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | Mount | File | Endpoints |
 |---|---|---|
 | `/auth` | routes/auth.js | POST login, POST logout, GET me, GET permissions |
-| `/projects` | routes/projects.js | GET / (with counts), POST /, PUT /:id, DELETE /:id (cascade delete + removes WA auth dir) |
-| `/accounts` | routes/accounts.js | GET/PUT me, GET /, POST /, PUT /:id, DELETE /:id, POST /:id/change-password |
+| `/projects` | routes/projects.js | GET / (member workspaces + counts), POST / (`projects.manage`), PUT /:id, DELETE /:id (`projects.manage`; cascade delete + removes WA auth dir) |
+| `/accounts` | routes/accounts.js | GET/PUT me, GET / (self + created accounts; includes `projectIds`), POST /, PUT /:id (`permissions`, `projectIds`), DELETE /:id, POST /:id/change-password |
 | `/leads` | routes/leads.js | GET / (filters: search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder), GET/PUT/DELETE /:id, POST /, POST /bulk (verify/dead/stage/tag/untag/delete/convert), POST /import/preview (multer CSV), POST /import/confirm |
 | `/stages` | routes/stages.js | CRUD + POST /reorder |
 | `/tags` | routes/tags.js | CRUD (GET includes lead_count) |

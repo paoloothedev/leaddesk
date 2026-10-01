@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission } from './auth.js';
 import { getDB } from '../db.js';
 
 const router = Router();
@@ -11,7 +12,7 @@ router.get('/', (req, res) => {
   res.json(settings);
 });
 
-router.put('/', (req, res) => {
+router.put('/', requirePermission('settings.edit'), (req, res) => {
   const db = getDB();
   const { key, value } = req.body;
   if (!key) return res.status(400).json({ error: 'Key is required' });

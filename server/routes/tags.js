@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission } from './auth.js';
 import { getDB, logAudit } from '../db.js';
 
 const router = Router();
@@ -21,7 +22,7 @@ router.get('/', (req, res) => {
 });
 
 // Create tag
-router.post('/', (req, res) => {
+router.post('/', requirePermission('tags.edit'), (req, res) => {
   const db = getDB();
   const { name, color } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
@@ -34,7 +35,7 @@ router.post('/', (req, res) => {
 });
 
 // Update tag
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('tags.edit'), (req, res) => {
   const db = getDB();
   const existing = db.prepare('SELECT * FROM tags WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
@@ -51,7 +52,7 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete tag
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('tags.edit'), (req, res) => {
   const db = getDB();
   const existing = db.prepare('SELECT name FROM tags WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   db.prepare('DELETE FROM tags WHERE id = ? AND project_id = ?').run(req.params.id, req.project.id);

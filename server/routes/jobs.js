@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission } from './auth.js';
 import { getDB } from '../db.js';
 import { ownedIds } from '../lib/scope.js';
 import { sendHumanMessage, getStatus } from '../whatsapp.js';
@@ -61,7 +62,7 @@ function getBreakDuration() {
   return randomBetween(60, 180) * 1000;
 }
 
-router.post('/', (req, res) => {
+router.post('/', requirePermission('campaigns.send'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { campaignId, message, leads, delayMin, delayMax } = req.body;
@@ -91,18 +92,18 @@ router.post('/', (req, res) => {
   if (!state.processingJobId) processNextJob(projectId);
 });
 
-router.get('/', (req, res) => {
+router.get('/', requirePermission('broadcast.view', 'campaigns.send'), (req, res) => {
   const db = getDB();
   const jobs = db.prepare('SELECT * FROM broadcast_jobs WHERE project_id = ? ORDER BY created_at DESC').all(req.project.id);
   res.json(jobs);
 });
 
-router.get('/daily-status', (req, res) => {
+router.get('/daily-status', requirePermission('broadcast.view', 'campaigns.send'), (req, res) => {
   const state = getState(req.project.id);
   res.json({ sent: state.messagesSentToday, limit: DAILY_LIMIT, remaining: DAILY_LIMIT - state.messagesSentToday });
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('broadcast.view', 'campaigns.send'), (req, res) => {
   const db = getDB();
   const job = db.prepare('SELECT * FROM broadcast_jobs WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
@@ -110,7 +111,7 @@ router.get('/:id', (req, res) => {
   res.json({ ...job, leads });
 });
 
-router.post('/:id/pause', (req, res) => {
+router.post('/:id/pause', requirePermission('broadcast.manage'), (req, res) => {
   const db = getDB();
   const job = db.prepare('SELECT * FROM broadcast_jobs WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
@@ -119,7 +120,7 @@ router.post('/:id/pause', (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/:id/resume', (req, res) => {
+router.post('/:id/resume', requirePermission('broadcast.manage'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const job = db.prepare('SELECT * FROM broadcast_jobs WHERE id = ? AND project_id = ?').get(req.params.id, projectId);
@@ -132,7 +133,7 @@ router.post('/:id/resume', (req, res) => {
   if (!state.processingJobId) processNextJob(projectId);
 });
 
-router.post('/:id/stop', (req, res) => {
+router.post('/:id/stop', requirePermission('broadcast.manage'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const job = db.prepare('SELECT * FROM broadcast_jobs WHERE id = ? AND project_id = ?').get(req.params.id, projectId);
@@ -144,7 +145,7 @@ router.post('/:id/stop', (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('broadcast.manage'), (req, res) => {
   const db = getDB();
   const job = db.prepare('SELECT * FROM broadcast_jobs WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });

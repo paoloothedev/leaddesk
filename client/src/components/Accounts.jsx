@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash, Pencil, Eye, EyeSlash } from '@phosphor-icons/react'
+import { getProjects } from '../api'
 
 const PERMISSION_GROUPS = [
   { label: 'Dashboard', perms: ['dashboard.view'] },
@@ -12,6 +13,7 @@ const PERMISSION_GROUPS = [
   { label: 'WhatsApp', perms: ['whatsapp.view', 'whatsapp.control'] },
   { label: 'Settings', perms: ['settings.view', 'settings.edit'] },
   { label: 'Accounts', perms: ['accounts.view', 'accounts.manage'] },
+  { label: 'Workspaces', perms: ['projects.manage'] },
 ]
 
 export default function Accounts({ showToast, refresh }) {
@@ -22,6 +24,8 @@ export default function Accounts({ showToast, refresh }) {
   const [formPass, setFormPass] = useState('')
   const [formName, setFormName] = useState('')
   const [formPerms, setFormPerms] = useState([])
+  const [formProjects, setFormProjects] = useState([])
+  const [projects, setProjects] = useState([])
   const [showPass, setShowPass] = useState(false)
 
   const loadAccounts = async () => {
@@ -32,14 +36,21 @@ export default function Accounts({ showToast, refresh }) {
     } catch {}
   }
 
-  useEffect(() => { loadAccounts() }, [])
+  useEffect(() => {
+    loadAccounts()
+    getProjects().then(setProjects).catch(() => {})
+  }, [])
 
   const resetForm = () => {
-    setFormUser(''); setFormPass(''); setFormName(''); setFormPerms([]); setEditingId(null); setShowForm(false); setShowPass(false)
+    setFormUser(''); setFormPass(''); setFormName(''); setFormPerms([]); setFormProjects([]); setEditingId(null); setShowForm(false); setShowPass(false)
   }
 
   const togglePerm = (p) => {
     setFormPerms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
+  }
+
+  const toggleProject = (id) => {
+    setFormProjects(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   const toggleGroup = (groupPerms) => {
@@ -57,7 +68,7 @@ export default function Accounts({ showToast, refresh }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ username: formUser, password: formPass, display_name: formName, permissions: formPerms }),
+        body: JSON.stringify({ username: formUser, password: formPass, display_name: formName, permissions: formPerms, projectIds: formProjects }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -69,7 +80,7 @@ export default function Accounts({ showToast, refresh }) {
 
   const handleUpdate = async () => {
     try {
-      const body = { display_name: formName, permissions: formPerms }
+      const body = { display_name: formName, permissions: formPerms, projectIds: formProjects }
       if (formPass) body.password = formPass
       const res = await fetch(`/api/accounts/${editingId}`, {
         method: 'PUT',
@@ -102,6 +113,7 @@ export default function Accounts({ showToast, refresh }) {
     setFormPass('')
     setFormName(a.display_name)
     setFormPerms(a.permissions || [])
+    setFormProjects(a.projectIds || [])
     setShowForm(true)
     setShowPass(false)
   }
@@ -145,6 +157,33 @@ export default function Accounts({ showToast, refresh }) {
               <input type="text" value={formName} onChange={e => setFormName(e.target.value)}
                 className="w-full h-8 px-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40" />
             </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-2">
+              Workspaces <span className="font-normal text-zinc-400 dark:text-zinc-500">— which client businesses this account can open</span>
+            </label>
+            {projects.length === 0 ? (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">No workspaces yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {projects.map(p => {
+                  const on = formProjects.includes(p.id)
+                  return (
+                    <button key={p.id} type="button" onClick={() => toggleProject(p.id)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 h-7 rounded-lg text-[11px] font-medium transition-colors ${
+                        on ? 'bg-emerald-500 text-white' : 'border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
+                      }`}>
+                      <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                      {p.icon} {p.name}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {formProjects.length === 0 && projects.length > 0 && (
+              <p className="mt-1.5 text-[10px] text-amber-600 dark:text-amber-400">Without a workspace this account can log in but sees nothing.</p>
+            )}
           </div>
 
           <div className="mb-4">
@@ -196,6 +235,7 @@ export default function Accounts({ showToast, refresh }) {
               <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
                 <th className="text-left py-2.5 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">User</th>
                 <th className="text-left py-2.5 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Role</th>
+                <th className="text-left py-2.5 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Workspaces</th>
                 <th className="text-left py-2.5 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Permissions</th>
                 <th className="text-left py-2.5 px-4 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -212,6 +252,11 @@ export default function Accounts({ showToast, refresh }) {
                       a.role === 'admin' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
                     }`}>
                       {a.role}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                      {a.role === 'admin' ? 'All' : (a.projectIds || []).map(id => projects.find(p => p.id === id)?.name).filter(Boolean).join(', ') || '—'}
                     </span>
                   </td>
                   <td className="py-2.5 px-4">

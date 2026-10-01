@@ -11,7 +11,7 @@ import tagsRouter from './routes/tags.js';
 import templatesRouter from './routes/templates.js';
 import jobsRouter, { resumeAllProjectJobs } from './routes/jobs.js';
 import settingsRouter from './routes/settings.js';
-import authRouter, { authMiddleware, getUserFromToken, parseCookies } from './routes/auth.js';
+import authRouter, { authMiddleware, requirePermission, getUserFromToken, parseCookies } from './routes/auth.js';
 import accountsRouter from './routes/accounts.js';
 import clientsRouter from './routes/clients.js';
 import emailCampaignsRouter from './routes/emailCampaigns.js';
@@ -73,7 +73,7 @@ app.use('/api/email-campaigns', resolveProject, emailCampaignsRouter);
 app.use('/api/gmaps', resolveProject, gmapsRouter);
 
 // ── Project-scoped inline routes ────────────────────────────────
-app.get('/api/stats', resolveProject, (req, res) => {
+app.get('/api/stats', resolveProject, requirePermission('dashboard.view', 'leads.view'), (req, res) => {
   const db = getDB();
   const pid = req.project.id;
 
@@ -172,20 +172,20 @@ app.get('/api/stats', resolveProject, (req, res) => {
   });
 });
 
-app.get('/api/import-logs', resolveProject, (req, res) => {
+app.get('/api/import-logs', resolveProject, requirePermission('leads.import', 'dashboard.view'), (req, res) => {
   const db = getDB();
   const logs = db.prepare('SELECT * FROM import_logs WHERE project_id = ? ORDER BY created_at DESC LIMIT 50').all(req.project.id);
   res.json(logs);
 });
 
-app.get('/api/audit-log', resolveProject, (req, res) => {
+app.get('/api/audit-log', resolveProject, requirePermission('settings.view', 'dashboard.view'), (req, res) => {
   const db = getDB();
   const { limit } = req.query;
   const logs = db.prepare('SELECT * FROM audit_log WHERE project_id = ? ORDER BY created_at DESC LIMIT ?').all(req.project.id, parseInt(limit) || 100);
   res.json(logs);
 });
 
-app.get('/api/export', resolveProject, (req, res) => {
+app.get('/api/export', resolveProject, requirePermission('settings.edit'), (req, res) => {
   const db = getDB();
   const pid = req.project.id;
   const leads = db.prepare('SELECT * FROM leads WHERE project_id = ?').all(pid);
@@ -210,7 +210,7 @@ app.get('/api/export', resolveProject, (req, res) => {
   res.json({ leads, campaigns, stages, campaign_leads, stage_history, tags, lead_tags });
 });
 
-app.post('/api/import/backup', resolveProject, (req, res) => {
+app.post('/api/import/backup', resolveProject, requirePermission('settings.edit'), (req, res) => {
   const db = getDB();
   const pid = req.project.id;
   const data = req.body;
@@ -284,7 +284,7 @@ app.post('/api/import/backup', resolveProject, (req, res) => {
 });
 
 // CSV export
-app.get('/api/export/csv', resolveProject, (req, res) => {
+app.get('/api/export/csv', resolveProject, requirePermission('leads.view'), (req, res) => {
   const db = getDB();
   const pid = req.project.id;
   const leads = db.prepare("SELECT * FROM leads WHERE project_id = ? AND status = 'active' ORDER BY created_at ASC").all(pid);

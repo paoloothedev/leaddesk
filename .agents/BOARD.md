@@ -20,24 +20,16 @@ _(none)_
 
 ## TODO
 
-### T-005 · Apply requirePermission to all project routers
-- Status: TODO
-- Owner: —
-- Role: backend
-- Priority: P1
-- Files: server/routes/{leads,campaigns,jobs,tags,stages,templates,settings}.js, server/index.js (inline routes)
-- Updated: 2026-10-01
-- Notes: Permissions exist in `ALL_PERMISSIONS` but most routers ignore them. Coordinate with frontend
-  (T-006) so UI hides actions the user can't do.
-
 ### T-006 · Hide UI actions the user lacks permission for
 - Status: TODO
-- Owner: —
+- Owner: -
 - Role: frontend
 - Priority: P2
 - Files: client/src/components/Sidebar.jsx, LeadsTable.jsx, Campaigns.jsx, Settings.jsx
 - Depends on: T-005
-- Updated: 2026-10-01
+- Updated: 2026-10-01 01:08
+
+- Notes: Partly done: ProjectPicker hides create/edit/delete, Accounts has workspace picker. Remaining: Sidebar/LeadsTable/Campaigns/Settings should hide actions the user lacks (API already returns 403).
 
 ### T-009 · Persist broadcast daily counter; honour delay_min/max
 - Status: TODO
@@ -88,18 +80,30 @@ _(none)_
 - Notes: `queue(id, type, payload, run_at, attempts, status, last_error, project_id)`; `enqueue(type, payload,
   {runAt})`, handler registry, retries with backoff, survives restart. Don't migrate broadcasts onto it yet.
 
+## DONE
+
 ### T-017 · Project membership & access control (E0.7)
-- Status: TODO
-- Owner: —
+- Status: DONE
+- Owner: lead-claude
 - Role: backend
 - Priority: P1
 - Files: server/middleware/project.js, server/routes/projects.js, migration via T-013
 - Depends on: T-013
-- Updated: 2026-10-01
+- Updated: 2026-10-01 01:08
 - Notes: `project_members(project_id, account_id, role)`; creator auto-added; admins see all; GET /projects
   lists only member projects. Frontend members UI = separate task.
+  → Migration 002 project_members (backfills existing users into all workspaces); canAccessProject enforces membership for HTTP + sockets; accounts get projectIds; non-admin account mgmt can't escalate. Accounts UI has workspace picker.
 
-## DONE
+### T-005 · Apply requirePermission to all project routers
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P1
+- Files: server/routes/{leads,campaigns,jobs,tags,stages,templates,settings}.js, server/index.js (inline routes)
+- Updated: 2026-10-01 01:08
+- Notes: Permissions exist in `ALL_PERMISSIONS` but most routers ignore them. Coordinate with frontend
+  (T-006) so UI hides actions the user can't do.
+  → All project routes + inline index.js routes gated; bulk actions check per-action perm. test/access.test.js.
 
 ### T-013 · Versioned migrations system (E0.3)
 - Status: DONE

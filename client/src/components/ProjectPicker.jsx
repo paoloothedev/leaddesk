@@ -19,6 +19,10 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const perms = user?.permissions || []
+  const isAdmin = user?.role === 'admin'
+  const canManage = isAdmin || perms.includes('projects.manage')
+  const canEdit = canManage || perms.includes('settings.edit')
 
   const load = async () => {
     try {
@@ -139,7 +143,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Create new */}
-              <motion.button
+              {canManage && <motion.button
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 }}
@@ -150,7 +154,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                   <Plus size={24} weight="bold" />
                 </div>
                 <span className="text-xs font-medium">New project</span>
-              </motion.button>
+              </motion.button>}
 
               {/* Project cards */}
               <AnimatePresence>
@@ -173,7 +177,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                           {p.icon || '📁'}
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <span
+                          {canEdit && <span
                             role="button"
                             tabIndex={0}
                             onClick={(e) => openEdit(e, p)}
@@ -182,8 +186,8 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                             title="Edit project"
                           >
                             <PencilSimple size={13} />
-                          </span>
-                          <span
+                          </span>}
+                          {canManage && <span
                             role="button"
                             tabIndex={0}
                             onClick={(e) => handleDelete(e, p)}
@@ -196,7 +200,7 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
                             title={confirmDelete === p.id ? 'Click again to confirm delete' : 'Delete project'}
                           >
                             {confirmDelete === p.id ? <Check size={13} /> : <Trash size={13} />}
-                          </span>
+                          </span>}
                         </div>
                       </div>
 
@@ -225,7 +229,9 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
 
           {projects.length === 0 && !loading && (
             <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-4">
-              Create your first project to get started.
+              {canManage
+                ? 'Create your first project to get started.'
+                : "You haven't been added to any project yet — ask your agency admin to give you access."}
             </p>
           )}
         </motion.div>

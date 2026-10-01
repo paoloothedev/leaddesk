@@ -2,8 +2,9 @@
 // `id` (same as the filename without .js) and `up(db)`, then append it to MIGRATIONS below.
 // Never edit a migration that has already shipped — add a new one.
 import * as m001 from './001-baseline.js';
+import * as m002 from './002-project-members.js';
 
-export const MIGRATIONS = [m001];
+export const MIGRATIONS = [m001, m002];
 
 export function runMigrations(db) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)');

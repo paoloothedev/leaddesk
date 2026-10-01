@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission } from './auth.js';
 import { getDB } from '../db.js';
 
 const router = Router();
@@ -9,7 +10,7 @@ router.get('/', (req, res) => {
   res.json(stages);
 });
 
-router.post('/', (req, res) => {
+router.post('/', requirePermission('stages.edit'), (req, res) => {
   const db = getDB();
   const { name, color } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
@@ -20,7 +21,7 @@ router.post('/', (req, res) => {
   res.status(201).json(stage);
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('stages.edit'), (req, res) => {
   const db = getDB();
   const { name, color } = req.body;
   const existing = db.prepare('SELECT * FROM stages WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
@@ -30,7 +31,7 @@ router.put('/:id', (req, res) => {
   res.json(stage);
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('stages.edit'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const count = db.prepare('SELECT COUNT(*) as c FROM stages WHERE project_id = ?').get(projectId).c;
@@ -43,7 +44,7 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/reorder', (req, res) => {
+router.post('/reorder', requirePermission('stages.edit'), (req, res) => {
   const db = getDB();
   const { orderedIds } = req.body;
   if (!orderedIds || !orderedIds.length) return res.status(400).json({ error: 'orderedIds required' });

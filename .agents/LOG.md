@@ -44,3 +44,14 @@ Schema changes now go through `server/migrations/NNN-name.js` (see AGENTS.md rul
 `CREATE TABLE`/`ALTER` to db.js anymore.
 - Verified: npm test 15/15; migration applied once on live-DB snapshot (320 leads, 3 projects intact) and on the
   legacy pre-multiproject DB (319 leads backfilled into Default); rerun = no-op.
+---
+**2026-10-01 02:45 · lead-claude → @all** · `T-005, T-017` · DONE / CONTRACT
+Agency-mode access control is in.
+- Changed: migrations/002-project-members.js; middleware/project.js (membership); routes/auth.js (hasPermission,
+  projects.manage); requirePermission on every project route; routes/projects.js + accounts.js (membership,
+  anti-escalation); client Accounts.jsx (workspace picker, Workspaces column), ProjectPicker.jsx (gated actions).
+- Verified: npm test → 20/20 (new test/access.test.js); migration 002 on live-DB snapshot adds testuser to all 3
+  workspaces; client build OK. UI NOT visually checked (no browser on this box) — @frontend please eyeball
+  Settings → Accounts and the project picker as a non-admin.
+- CONTRACT: 403 now returned for missing permissions on leads/campaigns/jobs/gmaps/stats/export/etc.
+  Creating/deleting workspaces needs `projects.manage` (was settings.edit). GET /accounts items have `projectIds`.

@@ -1,20 +1,26 @@
 import { Router } from 'express';
 import { getDB, logAudit, createProject, seedStagesForProject } from '../db.js';
 import { authMiddleware, requirePermission } from './auth.js';
+import { canAccessProject } from '../middleware/project.js';
 import { removeProjectAuth } from '../whatsapp.js';
 
 const router = Router();
 router.use(authMiddleware);
 
-// List all projects with quick stats
+// List the projects this user can access, with quick stats
 router.get('/', (req, res) => {
   const db = getDB();
-  const projects = db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+  const projects = req.user.role === 'admin'
+    ? db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all()
+    : db.prepare(`
+        SELECT p.* FROM projects p
+        INNER JOIN project_members m ON m.project_id = p.id AND m.account_id = ?
+        ORDER BY p.created_at DESC
+      `).all(req.user.id);
   const leadCount = db.prepare("SELECT COUNT(*) as c FROM leads WHERE project_id = ? AND status = 'active'");
   const clientCount = db.prepare('SELECT COUNT(*) as c FROM clients WHERE project_id = ?');
   const campaignCount = db.prepare('SELECT COUNT(*) as c FROM campaigns WHERE project_id = ?');
   const tagCount = db.prepare('SELECT COUNT(*) as c FROM tags WHERE project_id = ?');
-  const waAuthDir = db.prepare('SELECT 1'); // placeholder
 
   const enriched = projects.map(p => ({
     ...p,
@@ -27,18 +33,22 @@ router.get('/', (req, res) => {
 });
 
 // Create project
-router.post('/', requirePermission('settings.edit'), (req, res) => {
+router.post('/', requirePermission('projects.manage'), (req, res) => {
   const { name, color, icon } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' });
   const project = createProject(name.trim(), color, icon, req.user.id);
+  if (req.user.role !== 'admin') {
+    getDB().prepare('INSERT OR IGNORE INTO project_members (project_id, account_id, created_at) VALUES (?, ?, ?)')
+      .run(project.id, req.user.id, Date.now());
+  }
   logAudit('create', 'project', project.id, project.name, { by: req.user.id }, project.id);
   res.status(201).json(project);
 });
 
 // Update project
-router.put('/:id', requirePermission('settings.edit'), (req, res) => {
+router.put('/:id', requirePermission('settings.edit', 'projects.manage'), (req, res) => {
   const db = getDB();
-  const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  const existing = canAccessProject(req.user, req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
   const { name, color, icon } = req.body;
   db.prepare('UPDATE projects SET name = ?, color = ?, icon = ? WHERE id = ?').run(
@@ -53,10 +63,10 @@ router.put('/:id', requirePermission('settings.edit'), (req, res) => {
 });
 
 // Delete project + all its data
-router.delete('/:id', requirePermission('settings.edit'), (req, res) => {
+router.delete('/:id', requirePermission('projects.manage'), (req, res) => {
   const db = getDB();
   const id = req.params.id;
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  const project = canAccessProject(req.user, id);
   if (!project) return res.status(404).json({ error: 'Not found' });
 
   const txn = db.transaction(() => {
@@ -80,6 +90,7 @@ router.delete('/:id', requirePermission('settings.edit'), (req, res) => {
     db.prepare('DELETE FROM settings WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM import_logs WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM audit_log WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM project_members WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM projects WHERE id = ?').run(id);
   });
 

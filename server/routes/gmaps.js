@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission } from './auth.js';
 import { createJob, getJob, listJobs, deleteJob } from '../gmaps/jobs.js';
 import { getDB, logAudit } from '../db.js';
 import crypto from 'crypto';
@@ -12,7 +13,7 @@ try {
 
 const router = Router();
 
-router.post('/scrape', (req, res) => {
+router.post('/scrape', requirePermission('leads.import'), (req, res) => {
   const { name, query, queries, depth, lang, geo, zoom } = req.body;
 
   let queryList = [];
@@ -35,7 +36,7 @@ router.post('/scrape', (req, res) => {
   res.json({ job_id: job.id, status: job.status });
 });
 
-router.get('/jobs', (req, res) => {
+router.get('/jobs', requirePermission('leads.import'), (req, res) => {
   const allJobs = listJobs(req.project.id).map(j => ({
     id: j.id,
     name: j.name,
@@ -54,7 +55,7 @@ router.get('/jobs', (req, res) => {
   res.json(allJobs);
 });
 
-router.get('/jobs/:id', (req, res) => {
+router.get('/jobs/:id', requirePermission('leads.import'), (req, res) => {
   const job = getJob(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
 
@@ -76,13 +77,13 @@ router.get('/jobs/:id', (req, res) => {
   });
 });
 
-router.delete('/jobs/:id', (req, res) => {
+router.delete('/jobs/:id', requirePermission('leads.import'), (req, res) => {
   const ok = deleteJob(req.params.id, req.project.id);
   if (!ok) return res.status(404).json({ error: 'Job not found or still running' });
   res.json({ ok: true });
 });
 
-router.get('/jobs/:id/download', (req, res) => {
+router.get('/jobs/:id/download', requirePermission('leads.import'), (req, res) => {
   const job = getJob(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   if (job.status !== 'completed' || !job.results?.length) return res.status(400).json({ error: 'No results' });
@@ -154,7 +155,7 @@ router.get('/jobs/:id/download', (req, res) => {
   res.send(csv);
 });
 
-router.post('/jobs/:id/import', async (req, res) => {
+router.post('/jobs/:id/import', requirePermission('leads.import'), async (req, res) => {
   const job = getJob(req.params.id, req.project.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   if (job.status !== 'completed') return res.status(400).json({ error: 'Job not completed' });

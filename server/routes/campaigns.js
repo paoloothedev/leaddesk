@@ -1,10 +1,11 @@
 import { Router } from 'express';
+import { requirePermission } from './auth.js';
 import { getDB, logAudit } from '../db.js';
 import { ownedIds, isOwned } from '../lib/scope.js';
 
 const router = Router();
 
-router.get('/', (req, res) => {
+router.get('/', requirePermission('campaigns.view'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const getLeadTags = db.prepare('SELECT t.id, t.name, t.color FROM tags t INNER JOIN lead_tags lt ON lt.tag_id = t.id WHERE lt.lead_id = ?');
@@ -20,7 +21,7 @@ router.get('/', (req, res) => {
   res.json(enriched);
 });
 
-router.post('/', (req, res) => {
+router.post('/', requirePermission('campaigns.edit'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { name, count } = req.body;
@@ -53,7 +54,7 @@ router.post('/', (req, res) => {
   res.status(201).json(campaign);
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('campaigns.delete'), (req, res) => {
   const db = getDB();
   const camp = db.prepare('SELECT name FROM campaigns WHERE id = ? AND project_id = ?').get(req.params.id, req.project.id);
   db.prepare('DELETE FROM campaign_leads WHERE campaign_id = ?').run(req.params.id);
@@ -63,7 +64,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // Add leads to existing campaign
-router.post('/:id/leads', (req, res) => {
+router.post('/:id/leads', requirePermission('campaigns.edit'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { leadIds, count, force } = req.body;
@@ -109,7 +110,7 @@ router.post('/:id/leads', (req, res) => {
 });
 
 // Remove a specific lead from a campaign
-router.delete('/:id/leads/:leadId', (req, res) => {
+router.delete('/:id/leads/:leadId', requirePermission('campaigns.edit'), (req, res) => {
   const db = getDB();
   const { id, leadId } = req.params;
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ? AND project_id = ?').get(id, req.project.id);
@@ -121,7 +122,7 @@ router.delete('/:id/leads/:leadId', (req, res) => {
 });
 
 // Get eligible leads for adding to a campaign
-router.get('/:id/eligible', (req, res) => {
+router.get('/:id/eligible', requirePermission('campaigns.view'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
   const { force } = req.query;

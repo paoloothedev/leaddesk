@@ -1,10 +1,16 @@
 import { getDB } from '../db.js';
 
 // Returns the project row if `user` may access it, else null.
-// Single place for workspace access rules (membership comes with T-017).
+// Single place for workspace access rules: admins see all, others need a project_members row.
 export function canAccessProject(user, projectId) {
   if (!user || !projectId || typeof projectId !== 'string') return null;
-  return getDB().prepare('SELECT * FROM projects WHERE id = ?').get(projectId) || null;
+  const db = getDB();
+  if (user.role === 'admin') return db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId) || null;
+  return db.prepare(`
+    SELECT p.* FROM projects p
+    INNER JOIN project_members m ON m.project_id = p.id AND m.account_id = ?
+    WHERE p.id = ?
+  `).get(user.id, projectId) || null;
 }
 
 // Requires authMiddleware to have run first (sets req.user).
