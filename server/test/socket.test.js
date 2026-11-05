@@ -38,3 +38,32 @@ test('logged-in socket gets status only for a real project', async () => {
   assert.equal(status.status, 'disconnected');
   s.close();
 });
+
+test('WhatsApp status and control need WhatsApp permissions, checked on every event', async () => {
+  const admin = client(srv.base);
+  await admin.login();
+  const pid = (await admin.post('/projects', { name: 'Socket perms' })).body.id;
+  const made = await admin.post('/accounts', { username: 'sockuser', password: 'pw123456', permissions: ['leads.view'], projectIds: [pid] });
+  const login = await fetch(srv.base + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'sockuser', password: 'pw123456' }) });
+  const { s } = await connect({ Cookie: login.headers.get('set-cookie').split(';')[0] });
+  const seen = [];
+  s.on('wa_status', (p) => seen.push(p));
+  const settle = () => new Promise(r => setTimeout(r, 250));
+
+  s.emit('join_project', pid);
+  await settle();
+  assert.equal(seen.length, 0, 'a member without WhatsApp permission gets no status (it can carry the QR)');
+
+  // Granted while connected: works at once
+  await admin.put(`/accounts/${made.body.id}`, { permissions: ['leads.view', 'whatsapp.view'] });
+  s.emit('join_project', pid);
+  await settle();
+  assert.equal(seen.length, 1);
+
+  // Lost while connected: no more status, even though the socket is still in the room
+  await admin.put(`/accounts/${made.body.id}`, { projectIds: [] });
+  s.emit('join_project', pid);
+  await settle();
+  assert.equal(seen.length, 1);
+  s.close();
+});

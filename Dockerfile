@@ -1,39 +1,32 @@
-# Stage 1: Build client
-FROM node:20-slim AS builder
-WORKDIR /app
-COPY client/package*.json ./client/
-RUN cd client && npm install
-COPY client/ ./client/
-RUN cd client && npm run build
+# Build the web app
+FROM node:22-bookworm-slim AS client
+WORKDIR /app/client
+COPY client/package*.json ./
+RUN npm ci
+COPY client/ ./
+RUN npm run build
 
-# Stage 2: Production
-FROM node:20-slim
-WORKDIR /app
-
-# Install Playwright Chromium dependencies for Google Maps scraper
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-    libdrm2 libdbus-1-3 libxkbcommon0 libatspi2.0-0 libxcomposite1 \
-    libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 \
-    libcairo2 libasound2 libwayland-client0 fonts-liberation \
+# Runtime: the API serves the built app. System Chromium runs the Maps scraper, so Playwright downloads no browser.
+FROM node:22-bookworm-slim
+ENV NODE_ENV=production \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    CHROMIUM=/usr/bin/chromium \
+    HOST=0.0.0.0 \
+    PORT=3001 \
+    DB_PATH=/data/leaddesk.db \
+    WA_AUTH_DIR=/data/baileys_auth \
+    GMAPS_JOBS_FILE=/data/jobs_data.json
+RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-liberation ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Playwright and its browser
-RUN npx playwright install chromium
-
-# Install server dependencies
-COPY server/package*.json ./server/
-RUN cd server && npm install --omit=dev
-
-# Copy server code
-COPY server/ ./server/
-
-# Copy built client
-COPY --from=builder /app/client/dist ./server/public/
-
-# Create data directory for persistent storage
-RUN mkdir -p /app/data
-
+WORKDIR /app/server
+COPY server/package*.json ./
+RUN npm ci --omit=dev
+COPY server/ ./
+COPY --from=client /app/client/dist /app/client/dist
+RUN mkdir -p /data && chown -R node:node /data
+USER node
+VOLUME /data
 EXPOSE 3001
-
-CMD ["node", "server/index.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "index.js"]

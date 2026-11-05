@@ -32,8 +32,10 @@ export function getDB() {
 }
 
 function seedAdminAccount() {
+  // A new install has no accounts: the setup wizard creates the admin (routes/setup.js). SEED_ADMIN=1 is for tests and
+  // scripts that need the old admin/admin login.
   const count = db.prepare('SELECT COUNT(*) as c FROM accounts').get();
-  if (count.c === 0) {
+  if (count.c === 0 && process.env.SEED_ADMIN === '1') {
     const hash = bcrypt.hashSync('admin', 10);
     db.prepare("INSERT INTO accounts (id, username, password_hash, display_name, role, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run('admin', 'admin', hash, 'Admin', 'admin', '[]', Date.now());

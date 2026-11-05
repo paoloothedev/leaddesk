@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash, Pencil, Eye, EyeSlash } from '@phosphor-icons/react'
 import { getProjects } from '../api'
+import { ROLES, roleOf } from '../roles'
 
 const PERMISSION_GROUPS = [
   { label: 'Dashboard', perms: ['dashboard.view'] },
@@ -24,7 +25,7 @@ export default function Accounts({ showToast, refresh }) {
   const [formUser, setFormUser] = useState('')
   const [formPass, setFormPass] = useState('')
   const [formName, setFormName] = useState('')
-  const [formPerms, setFormPerms] = useState([])
+  const [formPerms, setFormPerms] = useState(ROLES[1].perms)
   const [formProjects, setFormProjects] = useState([])
   const [projects, setProjects] = useState([])
   const [showPass, setShowPass] = useState(false)
@@ -43,7 +44,7 @@ export default function Accounts({ showToast, refresh }) {
   }, [])
 
   const resetForm = () => {
-    setFormUser(''); setFormPass(''); setFormName(''); setFormPerms([]); setFormProjects([]); setEditingId(null); setShowForm(false); setShowPass(false)
+    setFormUser(''); setFormPass(''); setFormName(''); setFormPerms(ROLES[1].perms); setFormProjects([]); setEditingId(null); setShowForm(false); setShowPass(false)
   }
 
   const togglePerm = (p) => {
@@ -146,7 +147,7 @@ export default function Accounts({ showToast, refresh }) {
               <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">Password</label>
               <div className="relative">
                 <input type={showPass ? 'text' : 'password'} value={formPass} onChange={e => setFormPass(e.target.value)}
-                  placeholder={editingId ? 'Leave blank to keep' : ''}
+                  placeholder={editingId ? 'Leave blank to keep' : 'At least 8 characters'}
                   className="w-full h-8 px-2.5 pr-8 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500/40" />
                 <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
                   {showPass ? <EyeSlash size={12} /> : <Eye size={12} />}
@@ -162,7 +163,7 @@ export default function Accounts({ showToast, refresh }) {
 
           <div className="mb-4">
             <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-2">
-              Workspaces <span className="font-normal text-zinc-400 dark:text-zinc-500">— which client businesses this account can open</span>
+              Workspaces <span className="font-normal text-zinc-400 dark:text-zinc-500">— pick one or more; this account can't see any others</span>
             </label>
             {projects.length === 0 ? (
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500">No workspaces yet.</p>
@@ -183,12 +184,28 @@ export default function Accounts({ showToast, refresh }) {
               </div>
             )}
             {formProjects.length === 0 && projects.length > 0 && (
-              <p className="mt-1.5 text-[10px] text-amber-600 dark:text-amber-400">Without a workspace this account can log in but sees nothing.</p>
+              <p className="mt-1.5 text-[10px] text-amber-600 dark:text-amber-400">Pick at least one workspace, otherwise this account can log in but sees nothing.</p>
             )}
           </div>
 
           <div className="mb-4">
-            <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-2">Permissions</label>
+            <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-2">Role</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+              {ROLES.map(r => {
+                const on = roleOf(formPerms)?.id === r.id
+                return (
+                  <button key={r.id} type="button" onClick={() => setFormPerms(r.perms)}
+                    className={`text-left rounded-lg border p-2.5 transition-colors ${on ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}>
+                    <span className="block text-xs font-medium text-zinc-900 dark:text-zinc-100">{r.label}</span>
+                    <span className="block text-[10px] leading-snug text-zinc-500 dark:text-zinc-400 mt-0.5">{r.desc}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <details open={!roleOf(formPerms)}>
+              <summary className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 cursor-pointer mb-2">
+                Customize permissions{roleOf(formPerms) ? '' : ' (custom)'}
+              </summary>
             <div className="space-y-2.5">
               {PERMISSION_GROUPS.map(group => {
                 const allIn = group.perms.every(p => formPerms.includes(p))
@@ -213,11 +230,12 @@ export default function Accounts({ showToast, refresh }) {
                 )
               })}
             </div>
+            </details>
           </div>
 
           <div className="flex gap-2">
             <button onClick={editingId ? handleUpdate : handleCreate}
-              disabled={!formUser || (!editingId && !formPass)}
+              disabled={!formUser || (!editingId && !formPass) || (formPass && formPass.length < 8) || (!editingId && !formProjects.length && projects.length > 0)}
               className="inline-flex items-center px-4 h-8 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
               {editingId ? 'Save Changes' : 'Create Account'}
             </button>
@@ -230,7 +248,7 @@ export default function Accounts({ showToast, refresh }) {
       )}
 
       {accounts.length > 0 && (
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
@@ -252,7 +270,7 @@ export default function Accounts({ showToast, refresh }) {
                     <span className={`inline-flex items-center px-2 h-5 rounded text-[10px] font-medium ${
                       a.role === 'admin' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
                     }`}>
-                      {a.role}
+                      {a.role === 'admin' ? 'Admin' : roleOf(a.permissions)?.label || 'Custom'}
                     </span>
                   </td>
                   <td className="py-2.5 px-4">

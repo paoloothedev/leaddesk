@@ -27,6 +27,11 @@ export default function ProjectPicker({ user, onLogout, darkMode, toggleDarkMode
   const load = async () => {
     try {
       const list = await getProjects()
+      // Someone given exactly one workspace has nothing to pick: go straight in
+      if (!isAdmin && list.length === 1 && !perms.includes('projects.manage')) {
+        navigate(`/p/${list[0].id}/dashboard`, { replace: true })
+        return
+      }
       setProjects(list)
     } catch (e) {
       setError(e.message)

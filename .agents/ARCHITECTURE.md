@@ -94,6 +94,7 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 
 | Mount | File | Endpoints |
 |---|---|---|
+| `/tokens` | routes/apiTokens.js | GET / (own tokens, no secret), POST {name} → `{token}` shown once (`ldk_…`, sha256 stored, migration 012), DELETE /:id — any logged-in user, own tokens only |
 | `/auth` | routes/auth.js | POST login, POST logout, GET me, GET permissions |
 | `/projects` | routes/projects.js | GET / (member workspaces + counts), POST / (`projects.manage`; optional `templateFrom: <projectId>` copies that workspace's setup via `lib/workspaceTemplate.js`), GET /:id/members (any member), PUT /:id, DELETE /:id (`projects.manage`; cascade delete + removes WA auth dir) |
 | `/accounts` | routes/accounts.js | GET/PUT me, GET / (self + created accounts; includes `projectIds`), POST /, PUT /:id (`permissions`, `projectIds`), DELETE /:id, POST /:id/change-password |
@@ -108,12 +109,25 @@ All below are under `/api`, need the session cookie, and (except auth/projects/a
 | `/tags` | routes/tags.js | CRUD (GET includes lead_count) |
 | `/templates` | routes/templates.js | CRUD |
 | `/campaigns` | routes/campaigns.js | GET, POST, DELETE /:id, POST /:id/leads, DELETE /:id/leads/:leadId, GET /:id/eligible |
-| `/jobs` | routes/jobs.js | POST / (create broadcast), GET /, GET /daily-status, GET /:id, POST /:id/pause|resume|stop, DELETE /:id |
+| `/jobs` | routes/jobs.js | POST / {leads, message, scheduledAt?} (422 + `problems` when content rules fail; returns eligible/skipped/estimate), POST /estimate (same checks, dry run), GET /, GET /daily-status, GET /health, GET/PUT /limits, PUT /health/warmup {days_ago}, POST /health/dismiss-alert, GET /:id, PUT /:id/schedule {scheduledAt}, POST /:id/pause|resume|stop (stop also cancels a scheduled job), DELETE /:id |
 | `/settings` | routes/settings.js | GET (object), PUT {key,value} |
 | `/clients` | routes/clients.js | GET (optional `page`/`limit`; filters search, status, stage, assigned, tag), GET /:id, POST, PUT /:id, DELETE /:id, POST /:id/activity |
 | `/email-campaigns` | routes/emailCampaigns.js | CRUD + lead membership |
 | `/gmaps` | routes/gmaps.js | POST /scrape, GET /jobs, GET/DELETE /jobs/:id, GET /jobs/:id/download, POST /jobs/:id/import |
 | inline | index.js | GET /stats, GET /import-logs, GET /audit-log, GET /export (JSON backup v2 via `lib/backup.js`: contacts, companies, stages, tags, campaigns, pipelines, deals + history, custom fields, templates), POST /import/backup (one transaction: wipes the workspace's CRM data, restores with fresh ids — works across workspaces; v1 backups still accepted), GET /export/csv |
+
+Auth: `authMiddleware` accepts the `lead_session` cookie **or** `Authorization: Bearer ldk_…` (personal access token,
+acts as its account). Contacts have a `message` column (draft outreach text; list filter `hasMessage=yes|no`).
+
+### MCP endpoint (`server/mcp.js`, mounted at `/mcp`, outside `/api`)
+POST `/mcp/<token>` or POST `/mcp` with Bearer header — stateless Streamable HTTP (new McpServer per request).
+Every tool calls this server's own `/api` over loopback with the same token, so permissions/scoping/audit are the
+normal ones; `/api/auth` and `/api/tokens` are blocked from `api_request`. New API features are reachable through
+`api_request` automatically — add a dedicated tool (and update `API_MAP`) only for common flows.
+Dedicated tools: workspaces/overview, contacts (list/get/create/update/bulk, `save_messages`), search, Maps scrape
+(start/list/get/import), deals, `whatsapp_status`, broadcasts (`preview_broadcast` dry run, `send_broadcast` — needs
+`user_confirmed: true`, `send_at` ISO time = scheduled message, `message: "{{message}}"` sends each contact's saved
+message — `list_broadcasts`, `manage_broadcast` details/pause/resume/stop/reschedule/start_now), `whatsapp_limits`.
 
 ### Socket.IO (index.js ↔ WhatsAppPage.jsx)
 Client → server: `join_project(projectId)`, `leave_project`, `wa_init {projectId}`, `wa_disconnect {projectId}`,
@@ -126,8 +140,13 @@ and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin).
 ### WhatsApp (`server/whatsapp.js`)
 - `clients: Map<projectId, state>`; auth files in `server/baileys_auth/<projectId>/`. Lazy: nothing connects
   until `wa_init` is emitted.
+- Connects with the current WA Web version (`fetchLatestWaWebVersion`, cached 6 h) — the version bundled with
+  Baileys goes stale and WhatsApp then answers 405 "Connection Failure". Reconnects back off 5 s → 5 min; with no
+  linked session it gives up after 3 failures (`lastError` in `wa_status`), and those failures add no health points.
+- The number is an identity (migration 015): `wa_number` is the workspace's active state, `wa_numbers` remembers every number linked here. On open, `linkNumber()` keeps state for the same number, restores warm-up/health/limits for a known one, and starts a new warm-up for a new one. Rate limits count per number (`wa_sends.sender_phone`); contact history stays per workspace. Moving a number to another workspace starts fresh.
+- On boot only workspaces with `wa_number.auto_connect = 1` reconnect (connected last time, not disconnected by the user). A saved session alone doesn't, so old queued broadcasts don't start by surprise. A 401 is treated as logged out (session cleared, QR needed, disconnect health points), not as restricted.
 - Status values: `disconnected → connecting → qr_ready → connected`, or `restricted` (401 / "restricted" /
-  "logged out" errors, or incoming message containing restricted/limit/suspended).
+  "logged out" errors, or a WhatsApp *system* message about a restriction — `isRestrictionNotice()`, never a contact's reply).
 - Auto-reconnect after 5 s unless intentional disconnect or logged out.
 - `sendHumanMessage()` simulates presence + typing (≥3 s, 25 ms/char) and random sleeps; `parseSpintax()`
   expands `{a|b|c}`. `checkPhones()` uses `onWhatsApp`.
@@ -141,14 +160,26 @@ and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin).
 - `done`/`cancelled` rows are pruned after 7 days. Use it for reminders, email sending, sequences, automations.
   (Broadcasts and Google Maps scrapes still use their own runners — migrate them later.)
 
-### Broadcast jobs (`server/routes/jobs.js`)
-- Per-project in-memory state (`projectStates`): `processingJobId`, `consecutiveFails`. The daily send count is
-  persisted in `wa_daily_counts(project_id, day)` (migration 005, local-date key) via `sentToday()`/`countSent()`.
-- Limits: `DAILY_LIMIT = 100`/project/day, `MAX_CONSECUTIVE_FAILS = 3` → pause 30 min.
-- Pacing: 30–75 s between leads, 60–180 s break every 10 messages, 10–30 s between messages of a sequence.
-  `delay_min/delay_max` from the request are stored but **not used**.
-- Variables in messages: `{{name}} {{phone}} {{email}} {{notes}} {{location}} {{facebook}} {{instagram}} {{tiktok}}`.
-- Waits (polls every 10 s) until the project's WA client is ready.
+### Broadcast jobs (`server/routes/jobs.js`) + anti-ban engine (`lib/waRules.js`, `lib/waGuard.js`)
+- Per-project runner (`projectStates`), one job at a time per workspace = per WhatsApp number. Statuses:
+  `scheduled` (migration 014, starts when `scheduled_at` is due) → `pending` → `running` → `completed`; `paused`
+  only by the user or an account restriction; `stopped`. While a limit blocks sending the job stays `running` with
+  `wait_reason` + `resume_at` and a timer re-runs it (one timer per workspace, earliest wake-up wins, max 6 h).
+- Before every send: `contactCheck()` (do_not_contact, 1 touch/contact/day, follow-ups on day 3/7, stop after 3
+  ignored) → `gate()` (48 h hard stop, recipient-local sending window 9–21 + no Friday mornings, per-minute/hour
+  caps, daily new-chat cap = warm-up schedule × health multiplier) → `isOnWhatsApp()` → send with typing
+  30–50 ms/char → `recordSent()` into `wa_sends`. Gaussian 45–180 s between contacts.
+- At creation (`planJob`): dedupe numbers, skip DNC/ignored, content rules for first messages (no links/prices,
+  must end with ? / ؟), mean similarity of rendered first messages ≤ 0.7, ETA via `estimateDuration()`. The
+  opt-out line is appended to first messages; `{{message}}` = the contact's saved message.
+- Health score 0–100 in `wa_number` (+15 disconnect, +10 failed send, +30 restricted, +20 low reply/delivery rate;
+  −5/h). ≥30 half volume, ≥60 20 %, ≥85 stop 48 h then half volume for 7 days. Events in `wa_events`.
+  `initWaGuard()` (index.js) subscribes to `onWaEvent` from whatsapp.js (open/close/logout/ack/incoming): delivery
+  acks fill `delivered_at`, incoming messages fill `replied_at`, opt-out replies ("لا", "stop", …) set
+  `leads.do_not_contact`. Logout resets warm-up. Limits are per workspace in `settings.wa_limits` (always
+  normalised/clamped on read). Table is `wa_sends` — old installs have an unused legacy `wa_messages`.
+- Variables: `{{name}} {{phone}} {{email}} {{notes}} {{location}} {{facebook}} {{instagram}} {{tiktok}} {{message}}`,
+  spintax `{a|b}` expanded by the runner (not by whatsapp.js) so the identical-text cap sees the final text.
 
 ### Google Maps scraper (`server/gmaps/`)
 - `jobs.js`: jobs live in memory + `jobs_data.json` (not in SQLite; path overridable with `GMAPS_JOBS_FILE`).
@@ -181,3 +212,27 @@ and `wa_init / wa_disconnect / wa_logout` require `whatsapp.control` (or admin).
 - Booleans: INTEGER 0/1.
 - Errors: `res.status(4xx).json({ error: 'Message' })`; client `request()` throws `Error(err.error)`.
 - Server logs: `console.log('[area:projectId] …')` style tags (`[wa:…]`, `[gmaps]`).
+
+### Campaigns and broadcasts
+A **campaign** is a named contact list (`campaigns`, `campaign_leads`). A **broadcast** (`broadcast_jobs`) is one send, with a
+`name` and an optional real `campaign_id` (migration 015 fixed it holding names). Pages: `/campaigns/:id` (contacts with their
+latest outreach, broadcasts), `/broadcast/:id` (message, per-contact result and text). `GET /jobs`, `GET /jobs/:id`, `GET /campaigns`
+and `GET /campaigns/:id` all carry delivered/replied counts from `wa_sends`; `GET /contacts/:id` returns `whatsapp: {sends, upcoming}`.
+`GET /campaigns` is summaries only, without contacts.
+
+### Maps scraper jobs
+One job runs at a time (`enqueue` in `gmaps/jobs.js`). Results are saved after each keyword. A job where every keyword failed is
+`failed`; partial failures are in `queryErrors`. `options.autoImport` calls `importJobResults` (`gmaps/import.js`) when it finishes.
+
+### Web security
+CORS allows same host, `CORS_ORIGINS`, and localhost outside production. Login: 10 failures per client per 15 min, then 429
+(`lib/loginLimit.js`; forwarded IP is trusted only from loopback). Session cookie is `Secure` when the request came over https.
+
+### Tags vs category
+`leads.category` (migration 016) holds the business type; the scraper no longer creates a tag per Google category. Tags are for the user's own labels.
+`POST /tags` with an existing name (any case) returns that tag. `GET/POST /tags/cleanup` preview and remove tags that only repeat `category`, plus unused ones; `POST /tags/:id/merge {into}`.
+Campaigns start empty unless given `count` or `leadIds`. MCP: `get_guide` explains the concepts; tags change only through `manage_tags` with `user_confirmed`.
+
+## WhatsApp inbox (T-040)
+
+`wa_inbox_chats` (one per person: phone and/or LID, lead link, assignee, open/done, unread) and `wa_inbox_messages` (direction, source contact|inbox|phone|broadcast, sender account, ack status, media). Same WhatsApp id = same row, so a send seen on the socket first is upgraded by `recordOutbound`. Files live in `MEDIA_ROOT` (`WA_MEDIA_DIR`, default next to the auth dir), max 25 MB, served as sandboxed downloads. `GET/POST/PATCH /api/inbox/...`, see routes/inbox.js. MCP: list_chats, get_chat, send_chat_message.

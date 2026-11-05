@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Trash, PencilSimple, Check, X, ChatText } from '@phosphor-icons/react'
 import { getTemplates, createTemplate, updateTemplate, deleteTemplate } from '../api'
+import { canI } from '../permissions'
 
 export default function MessageTemplates({ showToast }) {
+  const canEdit = canI('templates.edit')
   const [templates, setTemplates] = useState([])
   const [newName, setNewName] = useState('')
   const [newContent, setNewContent] = useState('')
@@ -87,7 +89,7 @@ export default function MessageTemplates({ showToast }) {
                   <>
                     <div className="flex items-start justify-between mb-2">
                       <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t.name}</span>
-                      <div className="flex gap-2">
+                      {canEdit && <div className="flex gap-2">
                         <button onClick={() => { setEditingId(t.id); setEditName(t.name); setEditContent(t.content) }}
                           className="inline-flex items-center gap-1 px-3 h-7 rounded-lg text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors active:scale-[0.98]">
                           <PencilSimple size={12} />
@@ -98,7 +100,7 @@ export default function MessageTemplates({ showToast }) {
                           <Trash size={12} />
                           Delete
                         </button>
-                      </div>
+                      </div>}
                     </div>
                     <p className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">{t.content}</p>
                   </>
@@ -108,7 +110,7 @@ export default function MessageTemplates({ showToast }) {
           </div>
         )}
 
-        <div className="p-5 border-t border-zinc-100 dark:border-zinc-800">
+        {canEdit && <div className="p-5 border-t border-zinc-100 dark:border-zinc-800">
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Add New Template</h3>
           <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
             className="w-full h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors mb-3" placeholder="Template name" />
@@ -119,7 +121,7 @@ export default function MessageTemplates({ showToast }) {
             <Plus size={14} weight="bold" />
             Add Template
           </button>
-        </div>
+        </div>}
       </div>
     </div>
   )

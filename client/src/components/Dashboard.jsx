@@ -233,11 +233,28 @@ export default function Dashboard({ stats, loadStats, refreshId, goView, openLea
             <button onClick={() => goView('campaigns')}
               className="w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors active:scale-[0.98]">
               <ChartLine size={14} />
-              Build campaign
+              Campaigns
             </button>
           </div>
         </motion.div>
       </div>
+
+      {stats.outreach && (
+        <button onClick={() => goView('campaigns')} className="w-full text-left mb-6 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900/50 hover:border-emerald-500/30 transition-colors">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">WhatsApp outreach · last 30 days</h2>
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">{stats.outreach.running} sending · {stats.outreach.scheduled} scheduled</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[['Sent', stats.outreach.sent, 'text-zinc-900 dark:text-zinc-100'], ['Delivered', stats.outreach.delivered, 'text-sky-600 dark:text-sky-400'], ['Replied', stats.outreach.replied, 'text-emerald-600 dark:text-emerald-400']].map(([label, n, cls]) => (
+              <div key={label}>
+                <div className={`text-2xl font-semibold tabular-nums ${cls}`}>{n}</div>
+                <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</div>
+              </div>
+            ))}
+          </div>
+        </button>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {stats.recentImports?.length > 0 && (

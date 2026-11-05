@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Trash, CaretUp, CaretDown, Signpost } from '@phosphor-icons/react'
 import { createStage, updateStage, deleteStage, reorderStages } from '../api'
+import { canI } from '../permissions'
 
 export default function Stages({ stages, loadStages, refreshId, showToast, refresh }) {
+  const canEdit = canI('stages.edit')
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState('#3d5a45')
   useEffect(() => { loadStages() }, [loadStages, refreshId])
@@ -60,12 +62,12 @@ export default function Stages({ stages, loadStages, refreshId, showToast, refre
               <span className="flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-mono font-medium text-zinc-400 dark:text-zinc-500 shrink-0" style={{ backgroundColor: s.color + '20', color: s.color }}>
                 {i + 1}
               </span>
-              <input type="color" value={s.color} onChange={e => handleUpdate(s.id, { color: e.target.value })}
+              <input type="color" disabled={!canEdit} value={s.color} onChange={e => handleUpdate(s.id, { color: e.target.value })}
                 className="w-7 h-7 rounded-lg cursor-pointer border-0 bg-transparent shrink-0" />
-              <input type="text" value={s.name} onChange={e => handleUpdate(s.id, { name: e.target.value })}
+              <input type="text" disabled={!canEdit} value={s.name} onChange={e => handleUpdate(s.id, { name: e.target.value })}
                 className="flex-1 bg-transparent border-0 text-sm text-zinc-900 dark:text-zinc-100 outline-none placeholder-zinc-400 dark:placeholder-zinc-500" />
               <span className="text-xs text-zinc-400 dark:text-zinc-500 font-mono tabular-nums w-10 text-right">{s.lead_count || 0}</span>
-              <div className="flex gap-0.5">
+              {canEdit && <div className="flex gap-0.5">
                 <button onClick={() => handleReorder(s.id, 'up')} disabled={i === 0}
                   className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-20 disabled:cursor-not-allowed transition-colors">
                   <CaretUp size={12} />
@@ -74,18 +76,18 @@ export default function Stages({ stages, loadStages, refreshId, showToast, refre
                   className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-20 disabled:cursor-not-allowed transition-colors">
                   <CaretDown size={12} />
                 </button>
-              </div>
-              <button onClick={() => handleDelete(s.id)}
+              </div>}
+              {canEdit && <button onClick={() => handleDelete(s.id)}
                 className="inline-flex items-center px-3 h-8 rounded-lg text-[11px] font-medium border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 transition-colors shrink-0 active:scale-[0.98]">
                 <Trash size={12} className="mr-1.5" />
                 Delete
-              </button>
+              </button>}
             </div>
           ))}
         </div>
       </motion.div>
 
-      <motion.div
+      {canEdit && <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1, type: 'spring', stiffness: 100, damping: 20 }}
@@ -103,7 +105,7 @@ export default function Stages({ stages, loadStages, refreshId, showToast, refre
             Add stage
           </button>
         </div>
-      </motion.div>
+      </motion.div>}
     </div>
   )
 }

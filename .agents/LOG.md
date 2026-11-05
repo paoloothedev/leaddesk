@@ -162,3 +162,111 @@ New UI: global search (Ctrl+K), saved views + custom-field filters, duplicates r
 duplicates", migration 011), Workspace wording + "copy setup from", permission-gated buttons (`canI()`).
 Remaining Phase-1-adjacent: T-034 (retire legacy clients — waits for Phase 2 timeline). Next: Phase 2.
 - Verified: npm test 63/63; client build OK; UI flows scripted with Playwright.
+---
+**2026-10-24 · lead-claude → @leaddesk-integrations** · DONE — scraper browser fix
+Google Maps scraper failed on every job: Playwright's bundled headless shell isn't installed (and is glibc-only on
+this Alpine box). `server/gmaps/scraper.js` now launches with `executablePath` = `$CHROMIUM` or `/usr/bin/chromium`
+if present, else Playwright's default (Docker unaffected). Verified: real scrape "restaurants" @ Al Khobar → 16
+results with phone/address; npm test 63/63.
+---
+**2026-10-27 · lead-claude → @all** · `T-035` · DONE — contact message field + MCP server for Claude
+User wants Claude connected to everything (incl. Maps scraping) and a per-contact message Claude writes and they copy.
+- Migration 012: `leads.message` + `api_tokens` (hashed personal access tokens). `authMiddleware` now also takes
+  `Authorization: Bearer ldk_…`. Routes: `/api/tokens` (own tokens only), `/mcp` (server/mcp.js, see ARCHITECTURE).
+- MCP tools: list_workspaces, workspace_overview, list/get/create/update_contact, save_messages, bulk_update_contacts,
+  search, start_maps_scrape, list/get_maps_job, import_maps_job, list_deals, whatsapp_status, api_request (everything else).
+- UI: Settings → "Claude (MCP)" (create/revoke connection link), Message panel on contact page (Copy, Open in WhatsApp
+  with prefilled text, inline edit), Message field in contact modal, copy button in contacts table.
+- New deps: @modelcontextprotocol/sdk, zod (server). Live DB backed up to server/leaddesk.db.pre-mcp-backup before migrating.
+- Verified: npm test 69/69 (new test/mcp.test.js + MCP isolation test); migration on live copy + pre-multiproject DB;
+  client build; headless screenshots desktop/dark/400px, no overflow; MCP round trip through the public tunnel.
+---
+**2026-10-28 · lead-claude → @all** · `T-036` · HANDOFF — WhatsApp anti-ban engine: backend done, UI partly done
+Done (backend, tested — npm test 91/91, migration 013 verified on live copy + pre-multiproject DB):
+- lib/waRules.js (pure: limits + clamps, warm-up, health score/decay/multiplier, gaussian delay, recipient-timezone
+  window + Friday mornings, content rules, opt-out detection, similarity, cadence, ETA), lib/waGuard.js (DB + WA
+  events), migration 013 (wa_number, wa_sends — NOT wa_messages: legacy table name clash —, wa_events,
+  leads.do_not_contact, broadcast_jobs.skipped/wait_reason/resume_at). routes/jobs.js rewritten: gate before every
+  send, jobs wait + auto-resume instead of pausing, POST /jobs/estimate, GET /jobs/health, GET/PUT /jobs/limits,
+  PUT /jobs/health/warmup, 422 on content problems. Also fixes old bug: jobs paused after 3 fails never resumed.
+- BroadcastJobs.jsx: daily bar shows new chats vs limit + health; job rows show wait reason.
+Left (UI): WaSafety settings panel (limits form + health dashboard + warm-up "number is N days old"),
+WhatsAppSend.jsx pre-send estimate (problems/skipped/ETA) + {{message}} variable button, do_not_contact toggle in
+LeadModal/ContactPage, api.js functions, visual check, ARCHITECTURE.md update. Live server NOT restarted (still old code).
+Known: whatsapp.js treats any incoming message containing "limit"/"restricted" as an account restriction — will
+misfire on customer replies; should be limited to WhatsApp system messages.
+---
+**2026-10-29 · lead-claude → @all** · `T-036, T-037` · DONE — anti-ban UI + scheduled WhatsApp messages
+- Scheduled broadcasts (migration 014 `broadcast_jobs.scheduled_at`, status `scheduled`): POST /jobs `scheduledAt`,
+  PUT /jobs/:id/schedule, stop = cancel. Runner timer: earliest wake-up wins so a far-off schedule can't cancel a
+  short limit wait. Send dialog: compose → Review (content problems, skipped, new chats/follow-ups, ETA) → Send
+  now / Schedule. Contact page: Schedule button sends `{{message}}` at a chosen time. Broadcasts list: Start now /
+  Cancel for scheduled jobs.
+- T-036 leftovers: Settings → WhatsApp "Number health / Number age / Sending limits" (WaSafety.jsx), do-not-contact
+  badge + toggle, `{{message}}` variable chip.
+- Verified: npm test 94/94 (scheduling + cross-workspace reschedule tests), migrations 013+014 on live copy and
+  pre-multiproject DB, client build, headless screenshots desktop/dark/400px (no console errors, no overflow).
+- Still open: whatsapp.js flags ANY incoming message containing "limit"/"restricted"/"suspended" as an account
+  restriction — misfires on customer replies; should only look at WhatsApp system messages.
+---
+**2026-10-29 · lead-claude → @leaddesk-integrations** · DONE — false "account restricted" from customer replies
+whatsapp.js marked the account restricted (stopping all sends until reconnect) whenever ANY incoming message
+contained "restricted"/"limit"/"suspended". Now `isRestrictionNotice(jid, text)` (lib/waRules.js) only accepts
+messages from WhatsApp's system sender (not 1:1 chats, LIDs, groups, status, channels) with explicit restriction
+wording (EN + AR). Connection-close 401/"restricted" detection unchanged. Verified: npm test 95/95 (new unit test).
+
+**2026-10-29 · lead-claude → @leaddesk-integrations** · DONE — scheduled messages & anti-ban over MCP
+mcp.js: new tools `preview_broadcast` (dry run), `send_broadcast` (requires `user_confirmed: true`; `send_at` ISO →
+scheduled job; `{{message}}` = per-contact saved message), `list_broadcasts`, `manage_broadcast`
+(details/pause/resume/stop/reschedule/start_now), `whatsapp_limits` (read/merge limits, number age, dismiss alert).
+All go through /api, so permissions, scoping and the anti-ban checks are the same as the UI. Server instructions
+updated. Verified: npm test 96/96 (new MCP test: preview, schedule, reschedule, cancel, limits, cross-workspace).
+
+**2026-10-29 · lead-claude → @leaddesk-integrations** · DONE — WhatsApp 405 reconnect loop
+Workspace "me" (no linked number) retried every 5 s forever with 405 "Connection Failure"; each attempt added a
+"disconnect" health event → score 100, 48 h hard stop + 7 days half volume. Cause: Baileys 7.0.0-rc13 bundles an
+outdated WA Web version. Fix (whatsapp.js): pass `fetchLatestWaWebVersion()` (cached 6 h); exponential backoff
+5 s → 5 min; give up after 3 failures when no session is linked and expose `lastError` (shown on WhatsApp page);
+close events carry `linked`, and waGuard ignores unlinked failures (`_onEvent` exported for tests). Live: logged out
+"me" over the socket, reset its wa_number penalties/events (backup: server/leaddesk.db.pre-wareset-backup).
+Verified: npm test 97/97; throwaway server on a DB copy reaches qr_ready instead of 405.
+
+**2026-11-01 · lead-claude** · NOTE — live hosting
+Box now has Node 24 as default; better-sqlite3 11.10 has no musl prebuild for it and there is no compiler, so the live
+server runs on `/usr/bin/node` (20.15.1, prebuild installed). Tests: `/usr/bin/node --test test/` (98/98).
+Permanent URL on the user's own domain — user-level named tunnel `leaddesk` (~/.cloudflared/leaddesk.yml).
+Kept alive by user crontab → ~/leaddesk-run/start.sh (@reboot + every 5 min). Don't run a second server on :3101.
+
+**2026-11-05 · lead-claude** · DONE — T-038: the app hangs together
+User reviewed the audit and asked to make it "linked and usable", plus direct import from the scraper.
+Number identity (migration 015, wa_numbers, linkNumber, per-number limits, Numbers table in Settings → WhatsApp). Auto-reconnect on
+boot only for workspaces that were connected. 401 = logged out instead of restricted. Campaign and broadcast pages replace CampaignModal;
+contact page shows WhatsApp history; broadcasts link to campaigns by id. Campaign creation no longer excludes every tagged contact.
+Security: cross-workspace campaign delete fixed (old test asserted the bug), CORS locked, Secure cookie, login rate limit, default-password
+banner. Scraper: auto-import, one job at a time, real failed status, saved per keyword. MCP: list/get/create_campaign, auto_import, campaign_id.
+test.csv untracked (still in public git history; history NOT rewritten). Live: backup server/leaddesk.db.pre-t038-backup, migrated, 6 scheduled broadcasts intact.
+Verified: /usr/bin/node --test test/ 109/109, migration on a copy of the real DB, Playwright walk of new pages (no console errors, no mobile overflow),
+live restart reconnected "me" alone. Correction to the audit: scraper jobs did already resume after restart.
+Not done: better-sqlite3 upgrade for Node 24 (engines now says <24), inbox, README screenshots, CI.
+
+**2026-11-05 · lead-claude** · DONE — empty campaigns, tag cleanup, teach Claude the tool (part of T-038)
+User: campaigns must not need leads first; Claude should learn the concepts (verified etc.); too many tags to filter.
+Finding: 127 tags in "me", 115 came from the scraper's per-category tags, not the AI. Migration 016 adds leads.category (backfilled from notes), scraper stops tagging categories, Business type filter on Contacts, top-10 tag buttons, tag merge/cleanup. Live cleanup ran on "me" only (backup: server/leaddesk.db.pre-tag-cleanup-backup). MCP: get_guide, instructions, manage_tags, add_to_campaign, category/verified filters. Verified: 114/114, rehearsal on a DB copy.
+Open question to user: 1204 of 1205 contacts in "me" have a company with the same name; hide Companies?
+
+**2026-11-05 · lead-claude** · DONE — Companies hidden from the menu (setting show_companies, default off; Settings → General). Pages and data stay. Verified in headless Chromium on a DB copy.
+
+**2026-11-05 · lead-claude** · DONE — Egyptian local numbers in "me" converted to +20 at the user's request
+Numbers like 01xxxxxxxxx had no country code, so WhatsApp lookups would fail. Converted contacts, companies and pending rows of active broadcasts (01[0125] + 8 digits only); country_code=20 for the workspace; landlines (02x) left. Backup: server/leaddesk.db.pre-phone-fix-backup. Known limit: normalizePhone applies the workspace code to any scraped number without "+".
+
+**2026-11-05 · lead-claude** · DONE — T-039: roles, Docker, setup wizard, tour
+Roles: presets in client/src/roles.js (permission shortcuts, server unchanged), single-workspace users skip the picker. Leaks fixed: wa_status/QR went to any member, socket permissions were stale until reconnect, MCP whatsapp_status ignored permissions. Passwords min 8.
+Setup: no default admin on new installs (SEED_ADMIN=1 for tests); /api/setup open only while accounts is empty. Tour: Tour.jsx, data-tour on menu items, once per browser.
+Docker rewritten: old compose mounted a volume on a file, the UI was copied where the server doesn't read it, and .dockerignore would have shipped jobs_data.json. CI + ghcr publish workflows added.
+Verified: 121 tests; fresh install with the image env walked in Chromium; prebuilt better-sqlite3 exists for node22 x64/arm64. NOT verified: real docker build (no daemon access).
+Before going public: real phone numbers replaced in Settings example and tests; test.csv and the older Settings example remain in git history.
+
+## 2026-11-05 · lead-claude · DONE T-040
+WhatsApp inbox (sidebar: Inbox). whatsapp.js now emits a `message` event for every 1:1 message (notify, append, history); lib/waInbox.js records it, jobs.js records broadcasts through recordOutbound. Sending: replies skip hours/new-chat caps but honour hard stop + per-minute limit; a first message uses the broadcast rules. Read = whatsapp.view, send/manage = campaigns.send. Socket event `wa_inbox` carries only ids.
+Found on a copy of the live DB: legacy `wa_chats` existed, so `CREATE TABLE IF NOT EXISTS` skipped ours and the index creation failed, and the boot code swallowed the migration error. Tables renamed `wa_inbox_*`; index.js now calls getDB() before listen so a failed migration stops the server.
+Verified: full server test suite, UI on a DB copy (desktop, dark, mobile), migration on the copy. Not verified by an agent: a real incoming message end to end.

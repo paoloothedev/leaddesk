@@ -3,12 +3,15 @@ import { motion } from 'framer-motion'
 import { io } from 'socket.io-client'
 import { WhatsappLogo, Plugs, PlugsConnected, SignOut, Warning } from '@phosphor-icons/react'
 import { getCurrentProjectId } from '../api'
+import { canI } from '../permissions'
 
 export default function WhatsAppPage({ showToast }) {
   const [socket, setSocket] = useState(null)
   const [waStatus, setWaStatus] = useState('disconnected')
   const [qr, setQR] = useState(null)
   const [restrictionReason, setRestrictionReason] = useState(null)
+  const [lastError, setLastError] = useState(null)
+  const [phone, setPhone] = useState(null)
   const socketRef = useRef(null)
   const projectIdRef = useRef(getCurrentProjectId())
 
@@ -31,6 +34,8 @@ export default function WhatsAppPage({ showToast }) {
       setWaStatus(payload.status)
       setQR(payload.qr)
       setRestrictionReason(payload.restrictionReason || null)
+      setLastError(payload.lastError || null)
+      setPhone(payload.phone || null)
     })
 
     return () => {
@@ -44,7 +49,7 @@ export default function WhatsAppPage({ showToast }) {
   const handleInit = async () => { socket?.emit('wa_init', { projectId: pid() }) }
   const handleDisconnect = async () => { socket?.emit('wa_disconnect', { projectId: pid() }) }
   const handleLogout = async () => {
-    if (!window.confirm('Logout and connect a different WhatsApp account for this project?')) return
+    if (!window.confirm('Log out this WhatsApp number? LeadDesk remembers it: if you link it again later, its warm-up, health and limits come back.')) return
     socket?.emit('wa_logout', { projectId: pid() })
   }
 
@@ -76,6 +81,7 @@ export default function WhatsAppPage({ showToast }) {
           <span className={`w-3 h-3 rounded-full ${config.dot}`} />
           <StatusIcon size={18} className="text-zinc-400 dark:text-zinc-500" />
           <span className="text-sm text-zinc-900 dark:text-zinc-100">{config.label}</span>
+          {waStatus === 'connected' && phone && <span className="text-sm tabular-nums text-zinc-500 dark:text-zinc-400">+{phone}</span>}
         </div>
 
         {waStatus === 'restricted' && restrictionReason && (
@@ -94,6 +100,13 @@ export default function WhatsAppPage({ showToast }) {
           </motion.div>
         )}
 
+        {waStatus === 'disconnected' && lastError && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+            <Warning size={16} className="text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">{lastError}</p>
+          </div>
+        )}
+
         {waStatus === 'qr_ready' && qr && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -105,14 +118,14 @@ export default function WhatsAppPage({ showToast }) {
           </motion.div>
         )}
 
-        {waStatus !== 'connected' && waStatus !== 'restricted' && (
+        {canI('whatsapp.control') && waStatus !== 'connected' && waStatus !== 'restricted' && (
           <button onClick={handleInit}
             className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98]">
             <PlugsConnected size={14} weight="fill" />
             {waStatus === 'disconnected' ? 'Connect WhatsApp' : 'Retry'}
           </button>
         )}
-        {(waStatus === 'connected' || waStatus === 'restricted') && (
+        {canI('whatsapp.control') && (waStatus === 'connected' || waStatus === 'restricted') && (
           <div className="flex items-center gap-2">
             <button onClick={handleDisconnect}
               className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors active:scale-[0.98]">

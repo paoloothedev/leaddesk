@@ -2,11 +2,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   ChartLine, Users, Skull, Megaphone, GearSix, Upload,
-  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo, SquaresFour, Handshake, Buildings } from '@phosphor-icons/react'
+  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo, SquaresFour, Handshake, Buildings, Compass, ChatCircleText } from '@phosphor-icons/react'
 import { can } from '../permissions'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: ChartLine, perms: ['dashboard.view', 'leads.view'] },
+  { id: 'inbox', label: 'Inbox', icon: ChatCircleText, perms: ['whatsapp.view'] },
   { id: 'leads', label: 'Contacts', icon: Users, perms: ['leads.view'] },
   { id: 'companies', label: 'Companies', icon: Buildings, perms: ['leads.view'] },
   { id: 'deals', label: 'Deals', icon: Handshake, perms: ['deals.view'] },
@@ -30,7 +31,7 @@ const itemVariants = {
   visible: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 20 } }
 }
 
-export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu, user, onLogout, project, openSearch }) {
+export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode, sidebarCollapsed, toggleSidebar, mobileMenuOpen, closeMobileMenu, user, onLogout, project, openSearch, showCompanies, openTour, unreadChats = 0 }) {
   const navigate = useNavigate()
 
   const goProjects = () => {
@@ -102,12 +103,13 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
           animate="visible"
           className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto"
         >
-          {NAV_ITEMS.filter(item => can(user, ...item.perms)).map(item => {
+          {NAV_ITEMS.filter(item => (showCompanies || item.id !== 'companies')).filter(item => can(user, ...item.perms)).map(item => {
             const Icon = item.icon
             const isActive = view === item.id
             return (
               <motion.button
                 key={item.id}
+                data-tour={item.id}
                 variants={itemVariants}
                 onClick={() => { goView(item.id); closeMobileMenu() }}
                 whileTap={{ scale: 0.97 }}
@@ -122,6 +124,9 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
               >
                 <Icon size={18} weight={isActive ? 'fill' : 'regular'} className="shrink-0" />
                 {!sidebarCollapsed && <span className="truncate text-xs">{item.label}</span>}
+                {item.id === 'inbox' && unreadChats > 0 && (
+                  <span className={`min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[10px] font-semibold flex items-center justify-center ${sidebarCollapsed ? 'absolute top-0.5 right-1.5' : 'ml-auto'}`}>{unreadChats > 99 ? '99+' : unreadChats}</span>
+                )}
                 {isActive && !sidebarCollapsed && (
                   <motion.div
                     layoutId="activeNav"
@@ -167,6 +172,16 @@ export default function Sidebar({ view, goView, stats, darkMode, toggleDarkMode,
                 <div className="text-[10px] text-zinc-500 capitalize">{user.role}</div>
               </div>
             )}
+            <button
+              onClick={() => { closeMobileMenu(); openTour() }}
+              className={`flex items-center rounded-lg transition-colors text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50 ${
+                sidebarCollapsed ? 'justify-center w-10 h-10' : 'w-full px-3 h-9 gap-2.5 text-xs font-medium'
+              }`}
+              title="Take the tour"
+            >
+              <Compass size={16} className="shrink-0" />
+              {!sidebarCollapsed && <span>Take the tour</span>}
+            </button>
             <button
               onClick={onLogout}
               className={`flex items-center rounded-lg transition-colors text-zinc-500 hover:text-red-400 hover:bg-zinc-800/50 ${

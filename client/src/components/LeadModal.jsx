@@ -26,6 +26,8 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
   const [status, setStatus] = useState('active')
   const [verified, setVerified] = useState('no')
   const [notes, setNotes] = useState('')
+  const [message, setMessage] = useState('')
+  const [doNotContact, setDoNotContact] = useState(false)
   const [phoneValid, setPhoneValid] = useState(false)
   const [selectedTagIds, setSelectedTagIds] = useState(new Set())
   const [lifecycle, setLifecycle] = useState('lead')
@@ -43,7 +45,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
   useEffect(() => {
     if (leadId === null) {
       setName(''); setPhone(''); setEmail(''); setFacebook(''); setInstagram(''); setTiktok(''); setLink(''); setLocation('')
-      setStage(stages[0]?.id || ''); setStatus('active'); setVerified('no'); setNotes(''); setPhoneValid(false); setSelectedTagIds(new Set())
+      setStage(stages[0]?.id || ''); setStatus('active'); setVerified('no'); setNotes(''); setMessage(''); setDoNotContact(false); setPhoneValid(false); setSelectedTagIds(new Set())
       setLifecycle('lead'); setOwnerId(''); setCompany(null); setCustom({})
       setLead(null)
     } else {
@@ -55,7 +57,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
           setFacebook(l.facebook || ''); setInstagram(l.instagram || ''); setTiktok(l.tiktok || '')
           setLink(l.link || ''); setLocation(l.location || ''); setStage(l.stage_id || '')
           setStatus(l.status || 'active'); setVerified(l.verified ? 'yes' : 'no')
-          setNotes(l.notes || ''); setPhoneValid(!!l.phone_valid)
+          setNotes(l.notes || ''); setMessage(l.message || ''); setDoNotContact(!!l.do_not_contact); setPhoneValid(!!l.phone_valid)
           setSelectedTagIds(new Set((l.tags || []).map(t => t.id)))
           setLifecycle(l.lifecycle || 'lead'); setOwnerId(l.owner_id || ''); setCompany(l.company || null); setCustom(l.custom || {})
         } catch {}
@@ -84,7 +86,7 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
   const handleSave = async () => {
     if (!name.trim()) { showToast('Name is required.', true); return }
     const data = {
-      name: name.trim(), phone, email, facebook, instagram, tiktok, link, location, notes,
+      name: name.trim(), phone, email, facebook, instagram, tiktok, link, location, notes, message, do_not_contact: doNotContact,
       stage_id: stage, status, verified: verified === 'yes', phone_valid: phoneValid,
       tag_ids: Array.from(selectedTagIds),
       lifecycle, company_id: company?.id || null, custom,
@@ -265,6 +267,17 @@ export default function LeadModal({ leadId, stages, tags, close, showToast, refr
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
               className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" />
           </div>
+
+          <div className="mt-4">
+            <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Message (draft to copy and send)</label>
+            <textarea value={message} onChange={e => setMessage(e.target.value)} rows={4} dir="auto" placeholder="Written by you or by Claude"
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors" />
+          </div>
+
+          <label className="mt-3 flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
+            <input type="checkbox" checked={doNotContact} onChange={e => setDoNotContact(e.target.checked)} className="accent-emerald-500 mt-0.5" />
+            <span>Do not contact <span className="text-zinc-400 dark:text-zinc-500">— never include in WhatsApp broadcasts (set automatically when they reply "no")</span></span>
+          </label>
 
           {lead?.campaigns?.length > 0 && (
             <div className="mt-6">

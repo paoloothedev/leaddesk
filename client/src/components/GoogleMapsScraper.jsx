@@ -31,7 +31,7 @@ const QUICK_KEYWORDS = [
   'lawyers', 'real estate agents', 'fitness centers', 'spas',
 ]
 
-export default function GoogleMapsScraper({ showToast, refresh }) {
+export default function GoogleMapsScraper({ showToast, refresh, goView }) {
   const [jobName, setJobName] = useState('')
   const [keywords, setKeywords] = useState('')
   const [geoInput, setGeoInput] = useState('51.5074,-0.1278')
@@ -45,6 +45,7 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
   const [selectedResults, setSelectedResults] = useState(new Set())
   const [importing, setImporting] = useState(false)
   const [checkWA, setCheckWA] = useState(false)
+  const [autoImport, setAutoImport] = useState(true)
 
   const loadJobs = useCallback(async () => {
     try {
@@ -61,9 +62,12 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
       try {
         const detail = await getGmapsJob(selectedJob)
         setJobDetail(detail)
-        if (detail.status === 'completed' || detail.status === 'failed') {
+        // An auto-import runs right after the scrape finishes: keep polling until it's in
+        const importing = detail.options?.autoImport && detail.result_count > 0 && !detail.imported && !detail.import_error
+        if (detail.status === 'failed' || (detail.status === 'completed' && !importing)) {
           clearInterval(interval)
           loadJobs()
+          if (detail.imported && refresh) refresh()
         }
       } catch {}
     }, 2000)
@@ -85,6 +89,8 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
         lang,
         geo: geoInput.trim(),
         zoom,
+        autoImport,
+        checkWhatsApp: autoImport && checkWA,
       }
       const res = await scrapeGmaps(data)
       setSelectedJob(res.job_id)
@@ -136,6 +142,7 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
       showToast(msg)
       if (refresh) refresh()
       setSelectedResults(new Set())
+      setJobDetail(await getGmapsJob(selectedJob))
     } catch (err) {
       showToast(err.message || 'Failed to import.', true)
     }
@@ -255,6 +262,19 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
             </label>
           </div>
 
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-zinc-700 dark:text-zinc-300">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={autoImport} onChange={e => setAutoImport(e.target.checked)} className="accent-emerald-500" />
+              Add results to Contacts automatically when done
+            </label>
+            {autoImport && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={checkWA} onChange={e => setCheckWA(e.target.checked)} className="accent-emerald-500" />
+                Check who is on WhatsApp
+              </label>
+            )}
+          </div>
+
           <button onClick={handleScrape} disabled={scraping || !keywords.trim()}
             className="inline-flex items-center gap-1.5 px-5 h-10 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98] disabled:opacity-50">
             {scraping ? <ArrowClockwise size={14} className="animate-spin" /> : <MagnifyingGlass size={14} weight="bold" />}
@@ -272,7 +292,7 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
                 {jobDetail.name || jobDetail.queries?.[0] || 'Scrape Results'}
               </h2>
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
-                {jobDetail.status === 'pending' && 'Queued...'}
+                {jobDetail.status === 'pending' && 'Queued — runs after the jobs ahead of it.'}
                 {jobDetail.status === 'running' && (
                   <span className="text-amber-600 dark:text-amber-400">
                     {jobDetail.progress?.message || jobDetail.current_query || 'Scraping...'}
@@ -285,7 +305,16 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
                   </span>
                 )}
                 {jobDetail.status === 'failed' && <span className="text-red-500">Failed: {jobDetail.error}</span>}
+                {jobDetail.imported && (
+                  <span className="text-zinc-600 dark:text-zinc-300"> · {jobDetail.imported.added} added to Contacts ({jobDetail.imported.skipped} duplicates skipped)</span>
+                )}
+                {jobDetail.import_error && <span className="text-red-500"> · Import failed: {jobDetail.import_error}</span>}
               </p>
+              {jobDetail.query_errors?.length > 0 && jobDetail.status === 'completed' && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">
+                  {jobDetail.query_errors.length} keyword{jobDetail.query_errors.length > 1 ? 's' : ''} failed: {jobDetail.query_errors.map(q => q.query).join(', ')}
+                </p>
+              )}
               {jobDetail.queries?.length > 1 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {jobDetail.queries.map((q, i) => (
@@ -302,10 +331,16 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
                     <FileCsv size={12} />
                     Download CSV
                   </button>
+                  {jobDetail.imported && goView && (
+                    <button onClick={() => goView('leads')}
+                      className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                      Open Contacts
+                    </button>
+                  )}
                   <button onClick={handleImport} disabled={importing}
                     className="inline-flex items-center gap-1.5 px-4 h-8 rounded-lg text-[11px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors active:scale-[0.98] disabled:opacity-50">
                     <DownloadSimple size={12} />
-                    {importing ? 'Importing...' : `Import${selectedResults.size > 0 ? ` (${selectedResults.size})` : ' All'}`}
+                    {importing ? 'Importing...' : `${jobDetail.imported ? 'Import again' : 'Import'}${selectedResults.size > 0 ? ` (${selectedResults.size})` : ' All'}`}
                   </button>
                   <label className="inline-flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 cursor-pointer select-none">
                     <input type="checkbox" checked={checkWA} onChange={e => setCheckWA(e.target.checked)}
@@ -416,6 +451,7 @@ export default function GoogleMapsScraper({ showToast, refresh }) {
                   <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
                     {job.status}
                     {job.result_count > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-medium"> · {job.result_count} records</span>}
+                    {job.imported && <span> · {job.imported.added} in Contacts</span>}
                     {job.queries?.length > 1 && <span className="text-zinc-400"> · {job.queries.length} keywords</span>}
                     {job.status === 'failed' && job.error && <span className="text-red-500"> · {job.error}</span>}
                   </span>

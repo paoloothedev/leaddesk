@@ -25,7 +25,7 @@ const modes = [
 ];
 for (const m of modes) {
   const ctx = await browser.newContext({ viewport: { width: m.width, height: m.height } });
-  await ctx.addInitScript((d) => { try { localStorage.setItem('darkMode', String(d)) } catch {} }, m.dark);
+  await ctx.addInitScript((d) => { try { localStorage.setItem('darkMode', String(d)); localStorage.setItem('leaddesk_tour_done', '1') } catch {} }, m.dark);
   const page = await ctx.newPage();
   page.on('console', msg => { if (msg.type() === 'error' && !msg.text().includes('401')) errors.push(`[${m.name}] ${page.url()}: ${msg.text()}`); });
   page.on('pageerror', e => errors.push(`[${m.name}] ${page.url()}: ${e.message}`));

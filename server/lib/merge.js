@@ -1,7 +1,7 @@
 // Duplicate detection and merging for contacts (rows of `leads`).
 
 const RANK = { lead: 0, qualified: 1, churned: 1, customer: 2 };
-const FILL = ['phone', 'email', 'facebook', 'instagram', 'tiktok', 'link', 'location', 'owner_id', 'company_id', 'source'];
+const FILL = ['phone', 'email', 'facebook', 'instagram', 'tiktok', 'link', 'location', 'owner_id', 'company_id', 'source', 'message'];
 
 // Groups of 2+ contacts in the workspace sharing a phone (digits only, ≥7) or an email (case-insensitive).
 export function findDuplicates(db, pid, { limit = 100 } = {}) {
@@ -44,6 +44,8 @@ export function mergeContacts(db, pid, primaryId, duplicateIds) {
     for (const f of FILL) if (!merged[f] && d[f]) merged[f] = d[f];
     if ((RANK[d.lifecycle] ?? 0) > (RANK[merged.lifecycle] ?? 0)) merged.lifecycle = d.lifecycle;
     if (d.verified) merged.verified = 1;
+    if (d.do_not_contact) merged.do_not_contact = 1;
+    if (!merged.category && d.category) merged.category = d.category;
     if (d.phone_valid && merged.phone === d.phone) merged.phone_valid = 1;
     if (d.status === 'active' && merged.status === 'dead') { merged.status = 'active'; merged.dead_at = null; }
     if (d.notes && !(merged.notes || '').includes(d.notes)) merged.notes = merged.notes ? `${merged.notes}\n\n${d.notes}` : d.notes;
@@ -56,10 +58,10 @@ export function mergeContacts(db, pid, primaryId, duplicateIds) {
 
   db.prepare(`UPDATE leads SET phone = ?, phone_valid = ?, email = ?, facebook = ?, instagram = ?, tiktok = ?, link = ?, location = ?,
       notes = ?, status = ?, dead_at = ?, verified = ?, lifecycle = ?, owner_id = ?, company_id = ?, source = ?, custom = ?,
-      created_at = ?, updated_at = ? WHERE id = ?`).run(
+      created_at = ?, updated_at = ?, message = ?, do_not_contact = ?, category = ? WHERE id = ?`).run(
     merged.phone || '', merged.phone_valid ? 1 : 0, merged.email || '', merged.facebook || '', merged.instagram || '', merged.tiktok || '',
     merged.link || '', merged.location || '', merged.notes || '', merged.status, merged.dead_at, merged.verified ? 1 : 0,
-    merged.lifecycle, merged.owner_id, merged.company_id, merged.source || '', merged.custom, merged.created_at, Date.now(), primary.id,
+    merged.lifecycle, merged.owner_id, merged.company_id, merged.source || '', merged.custom, merged.created_at, Date.now(), merged.message || '', merged.do_not_contact ? 1 : 0, merged.category || null, primary.id,
   );
 
   // Re-point everything that references the duplicates
@@ -70,6 +72,8 @@ export function mergeContacts(db, pid, primaryId, duplicateIds) {
     'UPDATE stage_history SET lead_id = ? WHERE lead_id = ?',
     'UPDATE deals SET contact_id = ? WHERE contact_id = ?',
     'UPDATE job_leads SET lead_id = ? WHERE lead_id = ?',
+    'UPDATE wa_sends SET lead_id = ? WHERE lead_id = ?',
+    'UPDATE wa_inbox_chats SET lead_id = ? WHERE lead_id = ?',
     'UPDATE client_contact_map SET contact_id = ? WHERE contact_id = ?',
     'UPDATE clients SET lead_id = ? WHERE lead_id = ?',
   ].map(sql => db.prepare(sql));

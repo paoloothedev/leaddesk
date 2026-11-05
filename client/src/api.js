@@ -98,15 +98,44 @@ export function reorderStages(orderedIds) {
   return request('/stages/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
 }
 
+// ── First-run setup ─────────────────────────────────────────────
+export function getSetupStatus() {
+  return request('/setup/status');
+}
+export function completeSetup(data) {
+  return request('/setup', { method: 'POST', body: JSON.stringify(data) });
+}
+
 // ── Campaigns ───────────────────────────────────────────────────
 export function getCampaigns() {
   return request('/campaigns');
+}
+export function getCampaign(id) {
+  return request('/campaigns/' + id);
+}
+export function updateCampaign(id, data) {
+  return request('/campaigns/' + id, { method: 'PUT', body: JSON.stringify(data) });
 }
 export function createCampaign(data) {
   return request('/campaigns', { method: 'POST', body: JSON.stringify(data) });
 }
 export function deleteCampaign(id) {
   return request('/campaigns/' + id, { method: 'DELETE' });
+}
+export function addFilteredToCampaign(id, filters) {
+  return request('/campaigns/' + id + '/leads', { method: 'POST', body: JSON.stringify(filters) });
+}
+export function getCategories() {
+  return request('/contacts/categories');
+}
+export function getTagCleanup() {
+  return request('/tags/cleanup');
+}
+export function runTagCleanup(options) {
+  return request('/tags/cleanup', { method: 'POST', body: JSON.stringify(options) });
+}
+export function mergeTag(id, into) {
+  return request('/tags/' + id + '/merge', { method: 'POST', body: JSON.stringify({ into }) });
 }
 export function removeLeadFromCampaign(id, leadId) {
   return request('/campaigns/' + id + '/leads/' + leadId, { method: 'DELETE' });
@@ -146,11 +175,71 @@ export function deleteTag(id) {
 export function createJob(data) {
   return request('/jobs', { method: 'POST', body: JSON.stringify(data) });
 }
-export function getJobs() {
-  return request('/jobs');
+export function getJobs(campaignId) {
+  return request('/jobs' + (campaignId ? '?campaign=' + encodeURIComponent(campaignId) : ''));
 }
 export function getDailyStatus() {
   return request('/jobs/daily-status');
+}
+export function estimateJob(data) {
+  return request('/jobs/estimate', { method: 'POST', body: JSON.stringify(data) });
+}
+export function rescheduleJob(id, scheduledAt) {
+  return request('/jobs/' + id + '/schedule', { method: 'PUT', body: JSON.stringify({ scheduledAt }) });
+}
+
+// ── WhatsApp inbox ──────────────────────────────────────────────
+export function getChats(params = {}) {
+  return request('/inbox/chats?' + new URLSearchParams(params).toString());
+}
+export function getChat(id) {
+  return request('/inbox/chats/' + id);
+}
+export function getChatMessages(id, params = {}) {
+  return request('/inbox/chats/' + id + '/messages?' + new URLSearchParams(params).toString());
+}
+export function getInboxUnread() {
+  return request('/inbox/unread');
+}
+export function openChat(data) {
+  return request('/inbox/chats', { method: 'POST', body: JSON.stringify(data) });
+}
+export function markChatRead(id) {
+  return request('/inbox/chats/' + id + '/read', { method: 'POST' });
+}
+export function sendChatMessage(id, text) {
+  return request('/inbox/chats/' + id + '/messages', { method: 'POST', body: JSON.stringify({ text }) });
+}
+export function updateChat(id, data) {
+  return request('/inbox/chats/' + id, { method: 'PATCH', body: JSON.stringify(data) });
+}
+export function createContactFromChat(id, name) {
+  return request('/inbox/chats/' + id + '/contact', { method: 'POST', body: JSON.stringify({ name }) });
+}
+export async function getChatMedia(messageId) {
+  const res = await fetch(API + '/inbox/media/' + messageId, { credentials: 'include', headers: projectHeaders() });
+  if (!res.ok) throw new Error('File not available');
+  return res.blob();
+}
+
+// ── WhatsApp safety (anti-ban limits + number health) ───────────
+export function getWaHealth() {
+  return request('/jobs/health');
+}
+export function getWaLimits() {
+  return request('/jobs/limits');
+}
+export function saveWaLimits(limits) {
+  return request('/jobs/limits', { method: 'PUT', body: JSON.stringify({ limits }) });
+}
+export function setWarmupDays(daysAgo) {
+  return request('/jobs/health/warmup', { method: 'PUT', body: JSON.stringify({ days_ago: daysAgo }) });
+}
+export function getWaNumbers() {
+  return request('/jobs/numbers');
+}
+export function dismissWaAlert() {
+  return request('/jobs/health/dismiss-alert', { method: 'POST' });
 }
 export function getJob(id) {
   return request('/jobs/' + id);
@@ -395,4 +484,15 @@ export function mergeContacts(primaryId, duplicateIds) {
 }
 export function dismissDuplicate(reason, value) {
   return request('/contacts/duplicates/dismiss', { method: 'POST', body: JSON.stringify({ reason, value }) });
+}
+
+// ── Personal access tokens (Claude / MCP; no project header needed) ──
+export function getApiTokens() {
+  return request('/tokens');
+}
+export function createApiToken(name) {
+  return request('/tokens', { method: 'POST', body: JSON.stringify({ name }) });
+}
+export function deleteApiToken(id) {
+  return request('/tokens/' + id, { method: 'DELETE' });
 }

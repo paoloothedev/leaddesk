@@ -27,6 +27,7 @@ try {
 } catch {}
 
 export const LIFECYCLES = ['lead', 'qualified', 'customer', 'churned'];
+export const MESSAGE_MAX = 10000;
 
 // Validates the contact-level fields (lifecycle, owner, source, custom) present in `body`.
 // Returns { error } or { sets } where sets is a column → value map ready for an UPDATE.
@@ -45,6 +46,9 @@ function contactFields(body, projectId, { existing = {}, create = false } = {}) 
     sets.company_id = body.company_id;
   }
   if (body.source !== undefined) sets.source = String(body.source || '').slice(0, 50);
+  if (body.do_not_contact !== undefined) sets.do_not_contact = body.do_not_contact ? 1 : 0;
+  if (body.category !== undefined) sets.category = String(body.category ?? '').trim().slice(0, 120) || null;
+  if (body.message !== undefined) sets.message = String(body.message ?? '').slice(0, MESSAGE_MAX);
   if (body.custom !== undefined || create) {
     const v = validateCustom(projectId, 'contact', body.custom, existing, { create });
     if (v.error) return { error: v.error };
@@ -67,7 +71,7 @@ function parseCustom(l) {
 router.get('/', requirePermission('leads.view'), (req, res) => {
   const db = getDB();
   const projectId = req.project.id;
-  const { search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder, lifecycle, owner, source, company } = req.query;
+  const { search, stage, verified, phoneStatus, campaignUse, hasSocial, status, tag, tagNot, tagMode, sortBy, sortOrder, lifecycle, owner, source, company, hasMessage, category } = req.query;
 
   let sql = 'SELECT * FROM leads WHERE project_id = ?';
   const params = [projectId];
@@ -99,6 +103,9 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
 
   if (source) { sql += ' AND source = ?'; params.push(source); }
 
+  if (category === '__none') { sql += " AND (category IS NULL OR category = '')"; }
+  else if (category) { sql += ' AND category = ?'; params.push(category); }
+
   if (company === 'none') { sql += ' AND company_id IS NULL'; }
   else if (company) { sql += ' AND company_id = ?'; params.push(company); }
 
@@ -116,6 +123,9 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
   } else if (campaignUse === 'unused') {
     sql += ' AND id NOT IN (SELECT lead_id FROM campaign_leads)';
   }
+
+  if (hasMessage === 'yes') { sql += " AND message != ''"; }
+  else if (hasMessage === 'no') { sql += " AND message = ''"; }
 
   if (hasSocial === 'true') {
     sql += " AND (facebook != '' OR instagram != '' OR tiktok != '' OR link != '')";
@@ -178,6 +188,13 @@ router.get('/', requirePermission('leads.view'), (req, res) => {
 });
 
 // Duplicate groups (same phone digits or email) — registered before /:id
+// Business types in this workspace (from Google Maps, or set by hand), most common first.
+router.get('/categories', requirePermission('leads.view'), (req, res) => {
+  res.json(getDB().prepare(`SELECT category AS name, COUNT(*) AS count FROM leads
+    WHERE project_id = ? AND status = 'active' AND category IS NOT NULL AND category != ''
+    GROUP BY category ORDER BY count DESC, category`).all(req.project.id));
+});
+
 router.get('/duplicates', requirePermission('leads.view'), (req, res) => {
   res.json(findDuplicates(getDB(), req.project.id, { limit: Math.min(500, parseInt(req.query.limit) || 100) }));
 });
@@ -212,7 +229,17 @@ router.get('/:id', requirePermission('leads.view'), (req, res) => {
   if (!lead) return res.status(404).json({ error: 'Not found' });
   lead.verified = !!lead.verified;
   lead.phone_valid = !!lead.phone_valid;
+  lead.do_not_contact = !!lead.do_not_contact;
   lead.custom = parseCustom(lead);
+  const waPhone = String(lead.phone || '').replace(/\D/g, '');
+  lead.whatsapp = {
+    sends: db.prepare(`SELECT s.sent_at, s.delivered_at, s.replied_at, s.text, s.job_id, s.sender_phone, s.legacy, j.name AS job_name FROM wa_sends s
+      LEFT JOIN broadcast_jobs j ON j.id = s.job_id AND j.project_id = s.project_id
+      WHERE s.project_id = ? AND (s.lead_id = ? OR (s.phone = ? AND s.phone != '')) ORDER BY s.sent_at DESC LIMIT 50`).all(req.project.id, lead.id, waPhone),
+    upcoming: db.prepare(`SELECT j.id AS job_id, j.name AS job_name, j.status, j.scheduled_at FROM job_leads jl
+      INNER JOIN broadcast_jobs j ON j.id = jl.job_id AND j.project_id = ?
+      WHERE jl.lead_id = ? AND jl.status = 'pending' AND j.status IN ('scheduled', 'pending', 'running', 'paused') ORDER BY COALESCE(j.scheduled_at, j.created_at)`).all(req.project.id, lead.id),
+  };
   lead.company = lead.company_id ? db.prepare('SELECT id, name FROM companies WHERE id = ?').get(lead.company_id) || null : null;
   lead.deals = db.prepare('SELECT id, title, value, currency, status, stage_id FROM deals WHERE contact_id = ? AND project_id = ? ORDER BY created_at DESC').all(lead.id, req.project.id);
   lead.campaigns = db.prepare(`
@@ -617,7 +644,7 @@ function getMaybeClosed(userReviewsRaw, openHoursRaw, popularTimesRaw, statusRaw
   return false;
 }
 
-function isValidPhone(raw) {
+export function isValidPhone(raw) {
   if (!raw) return false;
   const digits = String(raw).replace(/\D/g, '');
   if (digits.length < 10 || digits.length > 15) return false;
@@ -635,7 +662,7 @@ function classifyLink(url) {
   return 'link';
 }
 
-function normalizePhone(raw, countryCode) {
+export function normalizePhone(raw, countryCode) {
   if (!raw) return raw;
   let cleaned = String(raw).replace(/\s+/g, '');
   if (cleaned.includes('+')) {

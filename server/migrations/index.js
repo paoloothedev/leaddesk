@@ -12,8 +12,14 @@ import * as m008 from './008-deals.js';
 import * as m009 from './009-custom-fields.js';
 import * as m010 from './010-saved-views.js';
 import * as m011 from './011-duplicate-dismissals.js';
+import * as m012 from './012-contact-message.js';
+import * as m013 from './013-wa-antiban.js';
+import * as m014 from './014-scheduled-broadcasts.js';
+import * as m015 from './015-wa-numbers-campaign-links.js';
+import * as m016 from './016-lead-category.js';
+import * as m017 from './017-wa-inbox.js';
 
-export const MIGRATIONS = [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011];
+export const MIGRATIONS = [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017];
 
 export function runMigrations(db) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)');

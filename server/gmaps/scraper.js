@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import { existsSync } from 'fs';
 
 const EXTRACT_JS = `
 (function() {
@@ -79,6 +80,9 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 let persistentBrowser = null;
 let persistentContext = null;
 
+// Playwright's bundled browser is glibc-only; on Alpine/musl use the system Chromium.
+const CHROMIUM_PATH = process.env.CHROMIUM || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
+
 async function getBrowser() {
   if (persistentBrowser && persistentBrowser.isConnected()) return { browser: persistentBrowser, context: persistentContext };
 
@@ -87,6 +91,7 @@ async function getBrowser() {
 
   persistentBrowser = await chromium.launch({
     headless: true,
+    executablePath: CHROMIUM_PATH,
     args: [
       '--disable-blink-features=AutomationControlled',
       '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',

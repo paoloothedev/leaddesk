@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^11.0.0",
@@ -20,6 +21,10 @@
     "pino": "^10.3.1",
     "playwright": "^1.61.0",
     "qrcode": "^1.5.4",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "zod": "^4.6.7"
+  },
+  "engines": {
+    "node": ">=18 <24"
   }
 }

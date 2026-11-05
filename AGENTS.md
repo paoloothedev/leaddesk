@@ -10,6 +10,7 @@
 - Scrape businesses from **Google Maps** (Playwright) → import as **leads**
 - Organise leads with **stages** (pipeline), **tags**, **campaigns**, verification, "dead list"
 - Send bulk **WhatsApp** broadcasts (Baileys, unofficial WA Web API) with human-like pacing
+- **WhatsApp inbox**: team chats inside LeadDesk; every 1:1 message both ways is recorded (`lib/waInbox.js`, tables `wa_inbox_*`; `wa_chats`/`wa_messages` are unused legacy tables on old installs, don't reuse those names)
 - **Email campaigns** (data model + UI only; no actual sending yet)
 - Convert leads → **clients** (CRM with activities)
 - Multi-user **accounts** with role + permission list
@@ -18,7 +19,7 @@
 **Product goal:** become a full CRM that replaces paid subscriptions (HubSpot, Pipedrive, Zoho, Kommo) for
 small/medium businesses, while keeping our edge (Google Maps lead gen + WhatsApp outreach, easy self-hosting).
 The phased plan is in **`.agents/ROADMAP.md`** — check which phase is active before proposing features.
-Docker/deployment work is **parked** until @human says otherwise.
+Docker is the main install path: `Dockerfile` + `docker-compose.yml`, all data in `/data`; `.github/workflows` publishes the image.
 
 ## 2. Stack & layout
 
@@ -61,7 +62,7 @@ npm start          # production server (serves client/dist if it exists)
 docker compose up -d --build
 ```
 
-Default login: `admin` / `admin` (seeded when `accounts` is empty).
+New installs have no accounts: the first visit opens the setup wizard (`routes/setup.js`). `SEED_ADMIN=1` seeds `admin` / `admin` when `accounts` is empty (the tests do this).
 Tests: `npm test --prefix server` (Node's built-in `node --test`, no extra deps). Each test file boots a real
 server on a random port with a throwaway DB/jobs file/WA dir via `server/test/helpers.js` — **every new endpoint
 needs tests, including a cross-workspace isolation test in `test/isolation.test.js`.** No linter; also run
@@ -97,7 +98,7 @@ Native modules (`better-sqlite3`, `bcrypt`) must be built for the OS you run on 
 6. **Frontend talks to the server only via `client/src/api.js`.** Add a function there; never `fetch('/api/…')`
    in components (exceptions: auth bootstrap in `App.jsx`).
 7. **Never commit or print secrets/data:** `server/*.db*`, `server/baileys_auth/**` (WhatsApp session keys),
-   `server/gmaps/jobs_data.json`, `test.csv`, `.env`. Do not delete them either — they are the user's live data.
+   `server/wa_media/**` (received WhatsApp files), `server/gmaps/jobs_data.json`, `test.csv`, `.env`. Do not delete them either — they are the user's live data.
 8. **Do not send real WhatsApp messages** or start broadcast jobs while testing unless the user explicitly asks.
    The WA account can get restricted/banned.
 9. Keep the existing style: ESM imports, 2-space indent, no semicolons in client JSX / semicolons in server JS,

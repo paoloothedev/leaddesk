@@ -1,12 +1,28 @@
-node_modules
-client/node_modules
-server/node_modules
+# Dependencies and build output are rebuilt inside the image
+**/node_modules
 client/dist
 server/public
-server/leaddesk.db*
+dist
+
+# Live data must never end up in an image
+server/*.db*
 server/baileys_auth
+server/wa_media
+server/.wwebjs_auth
+.wwebjs_cache
+server/gmaps/jobs_data.json
+server/accounts.json
+test.csv
+.env
+.env.*
+
+# Not needed at runtime
 .git
+.github
+.agents
+.claude
 .mimocode
+server/test
+scripts
 *.md
 *.log
-.env

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   DownloadSimple, UploadSimple, FileCsv, ClipboardText,
-  Tag, WhatsappLogo, Signpost, GearSix, UsersThree, Lock, UserCircle, ChartLine, Kanban, SlidersHorizontal
+  Tag, WhatsappLogo, Signpost, GearSix, UsersThree, Lock, UserCircle, ChartLine, Kanban, SlidersHorizontal, Plugs
 } from '@phosphor-icons/react'
 import { exportBackup, importBackup, exportCSV, getSettings, saveSetting, getStats } from '../api'
 import TagsView from './Tags'
@@ -13,6 +13,8 @@ import Accounts from './Accounts'
 import DashboardConfig from './DashboardConfig'
 import PipelineSettings from './PipelineSettings'
 import CustomFieldsSettings from './CustomFieldsSettings'
+import ClaudeConnect from './ClaudeConnect'
+import WaSafety from './WaSafety'
 import { can } from '../permissions'
 
 const TIMEZONES = [
@@ -37,12 +39,17 @@ const NAV = [
   { id: 'whatsapp', label: 'WhatsApp', icon: WhatsappLogo, perms: ['whatsapp.view', 'whatsapp.control', 'templates.view', 'templates.edit'] },
   { id: 'team', label: 'Team', icon: UsersThree, perms: ['accounts.view', 'accounts.manage'] },
   { id: 'backup', label: 'Backup', icon: ClipboardText, perms: ['settings.edit'] },
+  { id: 'claude', label: 'Claude (MCP)', icon: Plugs, perms: [] },
 ]
 
 export default function Settings({ user, ...props }) {
   const tabs = NAV.filter(item => can(user, ...item.perms))
-  const [activeTab, setActiveTab] = useState(() => tabs[0]?.id || 'account')
+  const [activeTab, setActiveTab] = useState(() => {
+    const wanted = new URLSearchParams(window.location.search).get('tab')
+    return tabs.some(t => t.id === wanted) ? wanted : (tabs[0]?.id || 'account')
+  })
   const [countryCode, setCountryCode] = useState('')
+  const [showCompanies, setShowCompanies] = useState(false)
   const [timezone, setTimezone] = useState('UTC')
   const [metrics, setMetrics] = useState([])
   const jsonInputRef = useRef(null)
@@ -53,6 +60,7 @@ export default function Settings({ user, ...props }) {
       try {
         const s = await getSettings()
         if (s.country_code) setCountryCode(s.country_code)
+        setShowCompanies(s.show_companies === '1')
         if (s.timezone) setTimezone(s.timezone)
       } catch {}
       try {
@@ -120,6 +128,18 @@ export default function Settings({ user, ...props }) {
                 </button>
               </div>
             </Section>
+            <Section title="Menu" desc="Companies are only useful when one business has several contacts. Hiding the page keeps the data, and contacts still show their company.">
+              <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300">
+                <input type="checkbox" checked={showCompanies} className="accent-emerald-500"
+                  onChange={async e => {
+                    const on = e.target.checked
+                    setShowCompanies(on)
+                    try { await saveSetting('show_companies', on ? '1' : '0'); refresh() }
+                    catch { setShowCompanies(!on); showToast('Failed to save.', true) }
+                  }} />
+                Show Companies in the menu
+              </label>
+            </Section>
             <Section title="Phone Format" desc="Set your country code so imported phone numbers are formatted correctly.">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-zinc-900 dark:text-zinc-100 font-medium">+</span>
@@ -132,12 +152,13 @@ export default function Settings({ user, ...props }) {
                 </button>
               </div>
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-2">
-                Example: 010 9423 4694 {countryCode ? `becomes +${countryCode} 109 423 4694` : 'will be formatted with your code'} during import.
+                Example: 010 1234 5678 {countryCode ? `becomes +${countryCode} 101 234 5678` : 'will be formatted with your code'} during import.
               </p>
             </Section>
           </div>
         )
       case 'account': return <AccountProfile user={user} showToast={showToast} />
+      case 'claude': return <ClaudeConnect showToast={showToast} />
       case 'tags': return <TagsView {...props} />
       case 'stages': return <Stages {...props} />
       case 'fields': return (
@@ -158,6 +179,9 @@ export default function Settings({ user, ...props }) {
       case 'whatsapp': return (
         <div className="space-y-5">
           <WhatsAppPage {...props} />
+          {can(user, 'broadcast.view', 'campaigns.send', 'whatsapp.view') && (
+            <WaSafety canEdit={can(user, 'broadcast.manage', 'settings.edit')} showToast={showToast} />
+          )}
           <Section title="Message Templates" desc="Create reusable message templates for your WhatsApp campaigns. Use {{name}}, {{phone}}, {{email}} as variables.">
             <MessageTemplates {...props} />
           </Section>

@@ -2,14 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   MagnifyingGlass, Funnel, CheckCircle, XCircle, Trash,
-  ArrowSquareOut, UserPlus, CaretRight, PaperPlaneTilt
+  ArrowSquareOut, UserPlus, CaretRight, PaperPlaneTilt, Copy
 } from '@phosphor-icons/react'
-import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign, getProjectMembers, getCustomFields, getViews, createView, deleteView } from '../api'
+import { getLeads, updateLead, deleteLead, bulkAction, addLeadsToCampaign, getProjectMembers, getCustomFields, getViews, createView, deleteView, getCategories, createCampaign } from '../api'
 import { canI } from '../permissions'
 import { formatCustomValue } from './CustomFieldInputs'
 import Pagination from './Pagination'
 import { LIFECYCLE } from '../lifecycle'
 import WhatsAppSend from './WhatsAppSend'
+import { copyText } from '../clipboard'
 
 function socialLinks(l) {
   return (
@@ -32,6 +33,9 @@ const rowVariants = {
   })
 }
 
+// Tag buttons shown before "All tags": the most used, plus anything selected.
+const TOP_TAGS = 10
+
 export default function LeadsTable({ stages, tags, campaigns, refreshId, openLeadModal, showToast, refresh, goView, user }) {
   const [leads, setLeads] = useState([])
   const [page, setPage] = useState(1)
@@ -46,6 +50,10 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
   const [fTag, setFTag] = useState([])
   const [fTagNot, setFTagNot] = useState(false)
   const [fTagMode, setFTagMode] = useState('any')
+  const [fCategory, setFCategory] = useState('')
+  const [categories, setCategories] = useState([])
+  const [allTags, setAllTags] = useState(false)
+  const [tagQuery, setTagQuery] = useState('')
   const [fLifecycle, setFLifecycle] = useState('')
   const [fOwner, setFOwner] = useState('')
   const [members, setMembers] = useState([])
@@ -74,6 +82,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
       if (fLifecycle) params.lifecycle = fLifecycle
       if (fOwner) params.owner = fOwner
       for (const [k, v] of Object.entries(fCustom)) if (v !== '' && v != null) params['cf.' + k] = v
+      if (fCategory) params.category = fCategory
       if (fTag.length) {
         const joined = fTag.join(',')
         if (fTagNot) params.tagNot = joined
@@ -87,16 +96,23 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
       setTotal(data.total)
       setSelected(new Set())
     } catch {}
-  }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner, fCustom, page, limit])
+  }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fCategory, fLifecycle, fOwner, fCustom, page, limit])
 
-  useEffect(() => { setPage(1) }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner, fCustom])
+  useEffect(() => { setPage(1) }, [search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fCategory, fLifecycle, fOwner, fCustom])
+  useEffect(() => { getCategories().then(setCategories).catch(() => {}) }, [refreshId])
 
   // Saved views store the whole filter state
-  const currentFilters = () => ({ search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fLifecycle, fOwner, fCustom })
+  const byUse = [...tags].sort((x, y) => (y.lead_count || 0) - (x.lead_count || 0))
+  const q = tagQuery.trim().toLowerCase()
+  const visibleTags = allTags
+    ? byUse.filter(t => !q || t.name.toLowerCase().includes(q) || fTag.includes(t.id))
+    : byUse.filter((t, i) => i < TOP_TAGS || fTag.includes(t.id))
+
+  const currentFilters = () => ({ search, fVerified, fPhone, fStage, fCampUse, fSocial, fTag, fTagNot, fTagMode, fCategory, fLifecycle, fOwner, fCustom })
   const applyFilters = (f = {}) => {
     setSearch(f.search || ''); setFVerified(f.fVerified || ''); setFPhone(f.fPhone || ''); setFStage(f.fStage || '')
     setFCampUse(f.fCampUse || ''); setFSocial(!!f.fSocial); setFTag(f.fTag || []); setFTagNot(!!f.fTagNot)
-    setFTagMode(f.fTagMode || 'any'); setFLifecycle(f.fLifecycle || ''); setFOwner(f.fOwner || ''); setFCustom(f.fCustom || {})
+    setFTagMode(f.fTagMode || 'any'); setFCategory(f.fCategory || ''); setFLifecycle(f.fLifecycle || ''); setFOwner(f.fOwner || ''); setFCustom(f.fCustom || {})
   }
   const loadViews = () => getViews('contact').then(setViews).catch(() => {})
   useEffect(() => { loadViews() }, [])
@@ -173,6 +189,16 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
     const ids = Array.from(selected)
     if (!ids.length) { showToast('Select some leads first.', true); return }
     setShowBulkCampaign(false)
+    if (campId === '__new') {
+      const name = prompt('Campaign name')?.trim()
+      if (!name) return
+      try {
+        const camp = await createCampaign({ name, leadIds: ids })
+        showToast(`Campaign "${camp.name}" created with ${camp.leads.length} contacts.`)
+        refresh()
+      } catch (err) { showToast(err.message || 'Failed to create campaign.', true) }
+      return
+    }
     try {
       const result = await addLeadsToCampaign(campId, ids, null, false)
       const camp = (campaigns || []).find(c => c.id === campId)
@@ -264,6 +290,14 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
           <option value="">Stage: any</option>
           {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        {categories.length > 0 && (
+          <select value={fCategory} onChange={e => setFCategory(e.target.value)}
+            className="h-9 max-w-[200px] px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
+            <option value="">Business type: any</option>
+            {categories.map(c => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
+            <option value="__none">Business type: not set</option>
+          </select>
+        )}
         <select value={fOwner} onChange={e => setFOwner(e.target.value)}
           className="h-9 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500 transition-colors">
           <option value="">Owner: anyone</option>
@@ -293,12 +327,22 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
           Has social
         </label>
         <div className="flex items-center flex-wrap gap-1">
-          {tags.map(t => (
+          {visibleTags.map(t => (
             <button key={t.id} onClick={() => setFTag(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}
               className={`inline-flex items-center px-2.5 h-7 rounded-md text-[11px] font-medium transition-colors ${fTag.includes(t.id) ? 'bg-emerald-500 text-white' : 'border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}>
               {t.name}
             </button>
           ))}
+          {tags.length > TOP_TAGS && (
+            <button onClick={() => { setAllTags(v => !v); setTagQuery('') }}
+              className="inline-flex items-center px-2 h-7 rounded-md text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+              {allTags ? 'Fewer tags' : `All ${tags.length} tags`}
+            </button>
+          )}
+          {allTags && (
+            <input value={tagQuery} onChange={e => setTagQuery(e.target.value)} placeholder="Find a tag..." autoFocus
+              className="h-7 w-32 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-[11px] text-zinc-700 dark:text-zinc-300 placeholder-zinc-400 outline-none" />
+          )}
           <button onClick={() => setFTagNot(!fTagNot)}
             className={`inline-flex items-center px-2 h-7 rounded-md text-[11px] font-medium transition-colors ${fTagNot ? 'bg-emerald-500 text-white' : 'border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}
             title="Invert tag filter">
@@ -312,7 +356,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
             </button>
           )}
         </div>
-        <button onClick={() => { setSearch(''); setFVerified(''); setFPhone(''); setFStage(''); setFCampUse(''); setFSocial(false); setFTag([]); setFTagNot(false); setFTagMode('any'); setFLifecycle(''); setFOwner(''); setFCustom({}) }}
+        <button onClick={() => { setSearch(''); setFVerified(''); setFPhone(''); setFStage(''); setFCampUse(''); setFSocial(false); setFTag([]); setFTagNot(false); setFTagMode('any'); setFCategory(''); setFLifecycle(''); setFOwner(''); setFCustom({}) }}
           className="h-9 px-3 rounded-lg text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
           Clear
         </button>
@@ -411,6 +455,7 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
               <select value="" onChange={e => { if (e.target.value) handleAddToCampaign(e.target.value) }}
                 className="h-7 px-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 outline-none">
                 <option value="">Select campaign...</option>
+                <option value="__new">+ New campaign...</option>
                 {(campaigns || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}
@@ -428,9 +473,9 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
       {showBulkWhatsApp && (
         <WhatsAppSend
           leads={leads.filter(l => selected.has(l.id))}
-          campaignName={null}
           close={() => setShowBulkWhatsApp(false)}
           showToast={showToast}
+          onCreated={(job) => goView(`broadcast/${job.id}`)}
         />
       )}
 
@@ -520,7 +565,14 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                       }
                     </td>
                     <td className="py-3 px-4 text-xs text-zinc-500 dark:text-zinc-400">
-                      {l.campaigns?.length ? l.campaigns.length : <span className="text-zinc-300 dark:text-zinc-600">&mdash;</span>}
+                      {l.campaigns?.length ? (
+                        <div className="flex flex-col items-start gap-0.5">
+                          {l.campaigns.map(x => (
+                            <button key={x.id} onClick={e => { e.stopPropagation(); goView(`campaigns/${x.id}`) }} dir="auto"
+                              className="max-w-[140px] truncate text-left hover:text-emerald-600 dark:hover:text-emerald-400">{x.name}</button>
+                          ))}
+                        </div>
+                      ) : <span className="text-zinc-300 dark:text-zinc-600">&mdash;</span>}
                     </td>
                     <td className="py-3 px-4">
                       {l.tags?.length ? (
@@ -534,6 +586,12 @@ export default function LeadsTable({ stages, tags, campaigns, refreshId, openLea
                     <td className="py-3 px-4 text-xs text-zinc-500 dark:text-zinc-400 max-w-[90px] truncate">{(l.notes || '').slice(0, 40)}{(l.notes || '').length > 40 ? '...' : ''}</td>
                     <td className="py-3 px-4">
                       <div className="flex gap-1">
+                        {l.message && (
+                          <button onClick={async () => { const ok = await copyText(l.message); showToast(ok ? 'Message copied.' : 'Could not copy.', !ok) }} title="Copy message"
+                            className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition-colors active:scale-[0.95]">
+                            <Copy size={12} />
+                          </button>
+                        )}
                         {!l.verified && canI('leads.verify') && (
                           <button onClick={() => quickVerify(l.id)}
                             className="inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors active:scale-[0.95]">

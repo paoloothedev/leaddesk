@@ -3,11 +3,23 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { scrapeGmaps } from './scraper.js';
+import { importJobResults } from './import.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const JOBS_FILE = process.env.GMAPS_JOBS_FILE || path.join(__dirname, 'jobs_data.json');
 
 const jobs = new Map();
+
+// For tests: replace the browser scrape.
+let scrape = scrapeGmaps;
+export const _setScraper = (fn) => { scrape = fn; };
+
+// One browser at a time, whoever asks: each scrape opens its own Chromium.
+let queue = Promise.resolve();
+const enqueue = (id) => {
+  queue = queue.then(() => runJob(id)).catch(err => console.error(`[gmaps] Job ${id} crashed: ${err.message}`));
+  return queue;
+};
 
 function loadJobs() {
   try {
@@ -56,19 +68,20 @@ function createJob(name, queries, options = {}, projectId = null) {
   };
   jobs.set(id, job);
   saveJobs();
-  runJob(id);
+  enqueue(id);
   return job;
 }
 
 async function runJob(id) {
   const job = jobs.get(id);
-  if (!job) return;
+  if (!job || job.status === 'completed' || job.status === 'failed') return;
 
   job.status = 'running';
   job.startedAt = Date.now();
 
   const allResults = [];
   const seen = new Set();
+  const queryErrors = [];
 
   for (let qi = 0; qi < job.queries.length; qi++) {
     const query = job.queries[qi].trim();
@@ -80,7 +93,7 @@ async function runJob(id) {
     console.log(`[gmaps] Job ${id}: scraping "${query}" (${qi + 1}/${job.queries.length})`);
 
     try {
-      const results = await scrapeGmaps(query, {
+      const results = await scrape(query, {
         depth: job.options.depth || 10,
         lang: job.options.lang || 'en',
         geo: job.options.geo || '',
@@ -101,8 +114,13 @@ async function runJob(id) {
       }
 
       console.log(`[gmaps] Job ${id}: "${query}" returned ${results.length} results (${allResults.length} total unique)`);
+      // Keep what we have so far: a crash or restart loses at most the current keyword
+      job.results = allResults;
+      job.totalFound = allResults.length;
+      saveJobs();
     } catch (err) {
       console.error(`[gmaps] Job ${id}: query "${query}" failed: ${err.message}`);
+      queryErrors.push({ query, error: err.message });
     }
 
     if (qi < job.queries.length - 1) {
@@ -112,11 +130,26 @@ async function runJob(id) {
 
   job.results = allResults;
   job.totalFound = allResults.length;
-  job.status = 'completed';
+  job.queryErrors = queryErrors;
+  // "completed" with nothing to show would hide a broken scrape
+  const allFailed = queryErrors.length > 0 && allResults.length === 0;
+  job.status = allFailed ? 'failed' : 'completed';
+  job.error = allFailed ? queryErrors[0].error : null;
   job.currentQuery = null;
   job.progress = null;
   job.completedAt = Date.now();
   saveJobs();
+
+  if (job.options?.autoImport && !job.imported && allResults.length > 0) {
+    try {
+      const r = await importJobResults(job, { checkWhatsApp: !!job.options.checkWhatsApp, userId: job.options.userId });
+      console.log(`[gmaps] Job ${id}: auto-imported ${r.added} contacts (${r.skipped} skipped)`);
+    } catch (err) {
+      console.error(`[gmaps] Job ${id}: auto-import failed: ${err.message}`);
+      job.importError = err.message;
+    }
+    saveJobs();
+  }
 
   console.log(`[gmaps] Job ${id}: completed with ${allResults.length} total unique results`);
 }
@@ -160,11 +193,9 @@ async function resumePendingJobs() {
   const pending = Array.from(jobs.values()).filter(j => j.status === 'pending').sort((a, b) => a.createdAt - b.createdAt);
   if (!pending.length) return;
   console.log(`[gmaps] Resuming ${pending.length} interrupted jobs`);
-  for (const job of pending) {
-    try { await runJob(job.id); } catch (err) { console.error(`[gmaps] Resume of ${job.id} failed: ${err.message}`); }
-  }
+  await Promise.all(pending.map(job => enqueue(job.id)));
 }
 
-export { createJob, getJob, listJobs, deleteJob, adoptLegacyJobs, resumePendingJobs };
+export { createJob, getJob, listJobs, deleteJob, adoptLegacyJobs, resumePendingJobs, saveJobs };
 
 loadJobs();

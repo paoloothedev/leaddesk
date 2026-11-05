@@ -4,7 +4,7 @@ import { MapPin, Megaphone, Users, EnvelopeSimple, ChartLine, GearSix, ArrowRigh
 const FEATURES = [
   { icon: MapPin, title: 'Google Maps Hub', desc: 'Import leads from Google Maps and manage outreach from one place.', color: 'bg-blue-500' },
   { icon: Megaphone, title: 'WhatsApp Campaigns', desc: 'Send bulk WhatsApp messages with delay control and tracking.', color: 'bg-emerald-500' },
-  { icon: EnvelopeSimple, title: 'Email Campaigns', desc: 'Create and manage email outreach campaigns with templates.', color: 'bg-amber-500' },
+  { icon: EnvelopeSimple, title: 'Personal messages', desc: 'Connect Claude to write and schedule a tailored message for every contact.', color: 'bg-amber-500' },
   { icon: Users, title: 'Client Management', desc: 'Convert leads to clients and track your sales pipeline.', color: 'bg-violet-500' },
   { icon: ChartLine, title: 'Analytics Dashboard', desc: 'Track your outreach performance with real-time stats.', color: 'bg-rose-500' },
   { icon: GearSix, title: 'Fully Customizable', desc: 'Stages, tags, permissions — configure it for any business.', color: 'bg-zinc-500' },
@@ -37,7 +37,7 @@ export default function Home({ goView }) {
           Outreach CRM for modern teams
         </h1>
         <p className="text-lg text-zinc-500 dark:text-zinc-400 max-w-[500px] mx-auto mb-8 leading-relaxed">
-          Import leads from Google Maps, run WhatsApp and email campaigns, manage clients — all from one dashboard.
+          Find leads on Google Maps, run safe WhatsApp campaigns and track every reply, all from one dashboard.
         </p>
         <div className="flex items-center justify-center gap-3">
           <button onClick={() => goView('dashboard')}

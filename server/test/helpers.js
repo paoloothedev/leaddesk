@@ -10,7 +10,7 @@ const SERVER_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 // `gmapsJobs`: optional { id: job } written to the jobs file before boot (jobs without projectId are
 // adopted by the Default workspace at startup).
-export async function startServer({ gmapsJobs } = {}) {
+export async function startServer({ gmapsJobs, seedAdmin = true } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'leaddesk-test-'));
   if (gmapsJobs) fs.writeFileSync(path.join(tmp, 'jobs.json'), JSON.stringify(gmapsJobs));
   const port = 20000 + Math.floor(Math.random() * 20000);
@@ -19,6 +19,7 @@ export async function startServer({ gmapsJobs } = {}) {
     env: {
       ...process.env,
       PORT: String(port),
+      SEED_ADMIN: seedAdmin ? '1' : '0',
       HOST: '127.0.0.1',
       DB_PATH: path.join(tmp, 'test.db'),
       GMAPS_JOBS_FILE: path.join(tmp, 'jobs.json'),

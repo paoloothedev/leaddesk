@@ -27,6 +27,8 @@ export function exportProject(db, pid) {
     deal_stage_history: all('SELECT h.* FROM deal_stage_history h INNER JOIN deals d ON d.id = h.deal_id WHERE d.project_id = ?'),
     custom_fields: all('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY entity, sort_order'),
     message_templates: all('SELECT * FROM message_templates WHERE project_id = ?'),
+    wa_inbox_chats: all('SELECT * FROM wa_inbox_chats WHERE project_id = ?'),
+    wa_inbox_messages: all('SELECT * FROM wa_inbox_messages WHERE project_id = ? ORDER BY at'),
   };
 }
 
@@ -69,6 +71,7 @@ export function restoreProject(db, pid, data) {
   // Older backups (v1) don't carry these; keep the workspace's current ones in that case.
   if (Array.isArray(data.custom_fields)) wipe.push('DELETE FROM custom_fields WHERE project_id = ?');
   if (Array.isArray(data.message_templates)) wipe.push('DELETE FROM message_templates WHERE project_id = ?');
+  if (Array.isArray(data.wa_inbox_chats)) wipe.push('DELETE FROM wa_inbox_messages WHERE project_id = ?', 'DELETE FROM wa_inbox_chats WHERE project_id = ?');
   for (const sql of wipe) db.prepare(sql).run(pid);
 
   const ins = (sql) => db.prepare(sql);
@@ -97,15 +100,15 @@ export function restoreProject(db, pid, data) {
 
   const LIFECYCLES = ['lead', 'qualified', 'customer', 'churned'];
   const insLead = ins(`INSERT INTO leads (id, name, phone, phone_valid, email, facebook, instagram, tiktok, link, location, notes, status,
-    verified, stage_id, created_at, dead_at, project_id, lifecycle, owner_id, company_id, source, custom, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    verified, stage_id, created_at, dead_at, project_id, lifecycle, owner_id, company_id, source, custom, updated_at, message, do_not_contact, category)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const l of data.leads) {
     const id = nid('lead'); map.lead.set(l.id, id);
     insLead.run(id, str(l.name, 500), str(l.phone, 50), l.phone_valid ? 1 : 0, str(l.email, 320), str(l.facebook, 1000), str(l.instagram, 1000),
       str(l.tiktok, 1000), str(l.link, 1000), str(l.location, 2000), str(l.notes, 20000), l.status === 'dead' ? 'dead' : 'active',
       l.verified ? 1 : 0, map.stage.get(l.stage_id) || fallbackStage, l.created_at || now, l.dead_at || null, pid,
       LIFECYCLES.includes(l.lifecycle) ? l.lifecycle : 'lead', owner(l.owner_id), map.company.get(l.company_id) || null,
-      str(l.source, 50), json(l.custom), l.updated_at || null);
+      str(l.source, 50), json(l.custom), l.updated_at || null, str(l.message, 10000), l.do_not_contact ? 1 : 0, l.category ? str(l.category, 120) : null);
   }
   const insSH = ins('INSERT INTO stage_history (lead_id, stage_id, at) VALUES (?, ?, ?)');
   for (const h of data.stage_history || []) {
@@ -178,6 +181,27 @@ export function restoreProject(db, pid, data) {
   if (Array.isArray(data.message_templates)) {
     const insTpl = ins('INSERT INTO message_templates (id, name, content, created_at, project_id) VALUES (?, ?, ?, ?, ?)');
     for (const t of data.message_templates) insTpl.run(nid('tpl'), str(t.name, 200) || 'Template', str(t.content, 20000), t.created_at || now, pid);
+  }
+
+  // Message history (media files aren't in the backup; those messages restore with their captions only)
+  if (Array.isArray(data.wa_inbox_chats)) {
+    const chatIds = new Map();
+    const insChat = ins(`INSERT OR IGNORE INTO wa_inbox_chats (id, project_id, phone, lid, jid, name, lead_id, assigned_to, status, unread, last_message_at, last_text, last_direction, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const c of data.wa_inbox_chats) {
+      const id = nid('chat'); chatIds.set(c.id, id);
+      insChat.run(id, pid, c.phone ? str(c.phone, 30) : null, c.lid ? str(c.lid, 60) : null, c.jid ? str(c.jid, 100) : null, c.name ? str(c.name, 200) : null,
+        map.lead.get(c.lead_id) || null, owner(c.assigned_to), c.status === 'done' ? 'done' : 'open', Number(c.unread) || 0,
+        c.last_message_at || null, str(c.last_text, 200), c.last_direction === 'in' ? 'in' : 'out', c.created_at || now);
+    }
+    const insMsg = ins(`INSERT OR IGNORE INTO wa_inbox_messages (id, project_id, chat_id, wa_msg_id, direction, source, type, text, original_text, account_id, sender_phone, status, media_state, media_mime, media_name, media_size, at, edited_at, deleted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const m of data.wa_inbox_messages || []) {
+      if (!chatIds.has(m.chat_id)) continue;
+      insMsg.run(nid('wam'), pid, chatIds.get(m.chat_id), m.wa_msg_id ? str(m.wa_msg_id, 200) : null, m.direction === 'in' ? 'in' : 'out', str(m.source, 20) || 'contact', str(m.type, 20) || 'text',
+        str(m.text, 70000), m.original_text ? str(m.original_text, 70000) : null, owner(m.account_id), m.sender_phone ? str(m.sender_phone, 30) : null, Number.isInteger(m.status) ? m.status : null,
+        m.media_state ? 'unavailable' : null, m.media_mime ? str(m.media_mime, 200) : null, m.media_name ? str(m.media_name, 500) : null, Number(m.media_size) || null, m.at || now, m.edited_at || null, m.deleted_at || null);
+    }
   }
 
   return { leads: map.lead.size, companies: map.company.size, deals: map.deal.size, stages: map.stage.size, tags: map.tag.size, campaigns: map.camp.size };

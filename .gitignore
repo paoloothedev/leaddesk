@@ -3,6 +3,7 @@ server/leaddesk.db*
 server/public/
 client/dist/
 server/baileys_auth/
+server/wa_media/
 server/.wwebjs_auth/
 .wwebjs_cache/
 .mimocode/

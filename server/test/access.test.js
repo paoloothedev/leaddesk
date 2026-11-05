@@ -114,3 +114,41 @@ test('new workspace can copy another workspace setup (not its data)', async () =
   const outsider = await makeUser(admin, 'outsider', ['projects.manage'], [B]);
   assert.equal((await outsider.c.post('/projects', { name: 'Steal', templateFrom: A })).status, 400);
 });
+
+test('a user given one workspace is locked to it, and changes apply at once', async () => {
+  const sales = ['dashboard.view', 'leads.view', 'leads.edit', 'campaigns.view', 'campaigns.edit', 'campaigns.send', 'broadcast.view'];
+  const u = await makeUser(admin, 'oneworkspace', sales, [A]);
+  assert.deepEqual(u.body.projectIds, [A]);
+  assert.deepEqual((await u.c.get('/projects')).body.map(p => p.id), [A]);
+
+  const inB = u.c.as(B);
+  for (const path of ['/contacts', '/campaigns', '/jobs', '/jobs/numbers', '/jobs/health', '/tags', '/tags/cleanup', '/stats', '/search?q=ab', '/settings', '/gmaps/jobs', '/contacts/categories']) {
+    assert.equal((await inB.get(path)).status, 404, path);
+  }
+  assert.equal((await inB.post('/campaigns', { name: 'x' })).status, 404);
+  assert.equal((await inB.post('/jobs', { leads: [{ id: 'x' }], message: 'Hi?' })).status, 404);
+
+  const inA = u.c.as(A);
+  assert.equal((await inA.get('/campaigns')).status, 200);
+  assert.equal((await inA.post('/campaigns', { name: 'Allowed' })).status, 201);
+  assert.equal((await inA.get('/tags/cleanup')).status, 403, 'tags.edit not granted');
+  assert.equal((await inA.get('/gmaps/jobs')).status, 403, 'leads.import not granted');
+  assert.equal((await inA.get('/jobs/limits')).status, 200);
+  assert.equal((await inA.put('/jobs/limits', { limits: {} })).status, 403);
+
+  // Moved to the other workspace: the old one closes straight away, with the same session
+  assert.equal((await admin.put(`/accounts/${u.id}`, { projectIds: [B] })).status, 200);
+  assert.equal((await inA.get('/contacts')).status, 404);
+  assert.equal((await inB.get('/contacts')).status, 200);
+
+  // Permission removed: same
+  assert.equal((await admin.put(`/accounts/${u.id}`, { permissions: ['leads.view'] })).status, 200);
+  assert.equal((await inB.post('/contacts', { name: 'n', phone: '201000000031' })).status, 403);
+});
+
+test('account passwords need at least 8 characters', async () => {
+  assert.equal((await admin.post('/accounts', { username: 'shortpw', password: 'abc' })).status, 400);
+  const u = await makeUser(admin, 'pwuser', ['leads.view'], [A]);
+  assert.equal((await admin.put(`/accounts/${u.id}`, { password: 'abc' })).status, 400);
+  assert.equal((await u.c.post(`/accounts/${u.id}/change-password`, { password: 'abc' })).status, 400);
+});

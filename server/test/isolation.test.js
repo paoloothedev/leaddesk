@@ -64,12 +64,18 @@ test('bulk actions ignore other workspace leads', async () => {
 });
 
 test('cannot pull another workspace lead into own campaign', async () => {
+  await A.post(`/campaigns/${a.campaign}/leads`, { leadIds: [a.lead] });
   const r = await B.post(`/campaigns/${b.campaign}/leads`, { leadIds: [a.lead] });
   assert.equal(r.status, 400);
   assert.ok(!JSON.stringify(r.body).includes('A lead'));
   assert.equal((await B.get(`/campaigns/${a.campaign}/eligible`)).status, 404);
-  assert.equal((await B.del(`/campaigns/${a.campaign}`)).status, 200);
-  assert.ok((await A.get('/campaigns')).body.some(c => c.id === a.campaign), 'A campaign was deleted by B');
+  assert.equal((await B.del(`/campaigns/${a.campaign}`)).status, 404);
+  assert.equal((await B.get(`/campaigns/${a.campaign}`)).status, 404);
+  assert.equal((await B.put(`/campaigns/${a.campaign}`, { name: 'hacked' })).status, 404);
+  const mine = (await A.get(`/campaigns/${a.campaign}`)).body;
+  assert.equal(mine.name === 'hacked', false);
+  assert.ok(mine.leads.some(l => l.id === a.lead), 'B emptied the campaign of A');
+  assert.equal((await B.post('/jobs', { campaignId: a.campaign, leads: [{ id: b.lead }], message: 'Hi?' })).status, 404);
 });
 
 test('client activities and email campaign membership are scoped', async () => {
@@ -81,4 +87,65 @@ test('client activities and email campaign membership are scoped', async () => {
 test('broadcast jobs only accept own leads', async () => {
   const r = await B.post('/jobs', { message: 'hi', leads: [{ id: a.lead, phone: '201000000001' }] });
   assert.equal(r.status, 400);
+});
+
+test('token and MCP access stay inside the account workspaces', async () => {
+  const root = client(srv.base);
+  await root.login();
+  const B_id = B.projectId;
+  assert.equal((await root.post('/accounts', { username: 'bonly', password: 'pw123456', permissions: ['leads.view', 'leads.edit'], projectIds: [B_id] })).status, 200);
+  const u = client(srv.base);
+  await u.login('bonly', 'pw123456');
+  const { token } = (await u.post('/tokens', { name: 't' })).body;
+  // other users' tokens are not listed or deletable
+  assert.ok(!(await root.get('/tokens')).body.some(t => t.name === 't' && t.prefix === token.slice(0, 10)));
+  const mine = (await u.get('/tokens')).body[0];
+  assert.equal((await root.del(`/tokens/${mine.id}`)).status, 404);
+
+  const h = (pid) => ({ Authorization: `Bearer ${token}`, 'X-Project-Id': pid });
+  assert.equal((await fetch(`${srv.base}/leads/${a.lead}`, { headers: h(A.projectId) })).status, 404);
+  assert.equal((await fetch(`${srv.base}/leads`, { headers: h(B_id) })).status, 200);
+
+  const origin = srv.base.replace(/\/api$/, '');
+  const rpc = async (name, args) => {
+    const r = await fetch(`${origin}/mcp/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+    });
+    return (await r.json()).result;
+  };
+  const ws = JSON.parse((await rpc('list_workspaces', {})).content[0].text);
+  assert.deepEqual(ws.map(w => w.id), [B_id]);
+  for (const [name, args] of [
+    ['get_contact', { workspace_id: A.projectId, contact_id: a.lead }],
+    ['save_messages', { workspace_id: A.projectId, messages: [{ contact_id: a.lead, message: 'x' }] }],
+    ['save_messages', { workspace_id: B_id, messages: [{ contact_id: a.lead, message: 'x' }] }],
+    ['whatsapp_status', { workspace_id: A.projectId }],
+  ]) {
+    const r = await rpc(name, args);
+    const failed = r.isError || JSON.parse(r.content[0].text).saved === 0;
+    assert.ok(failed, `${name} reached workspace A`);
+  }
+  assert.equal((await A.get(`/leads/${a.lead}`)).body.message, '');
+});
+
+test('WhatsApp limits, health and pre-send checks are per workspace', async () => {
+  assert.equal((await B.put('/jobs/limits', { limits: { maxMessagesPerHour: 7 } })).status, 200);
+  assert.equal((await A.get('/jobs/limits')).body.limits.maxMessagesPerHour, 30);
+  await B.put('/jobs/health/warmup', { days_ago: 90 });
+  assert.equal((await A.get('/jobs/health')).body.warmup.started_at, null);
+  const r = await B.post('/jobs/estimate', { leads: [{ id: a.lead }], message: 'Hi?' });
+  assert.equal(r.status, 400);
+  assert.ok(!JSON.stringify(r.body).includes('A lead'));
+});
+
+test('scheduled jobs cannot be moved or cancelled from another workspace', async () => {
+  const at = Date.now() + 2 * 24 * 3600 * 1000;
+  const job = (await A.post('/jobs', { leads: [{ id: a.lead }], message: 'Hi there, are you open tomorrow?', scheduledAt: at })).body;
+  assert.equal(job.status, 'scheduled', JSON.stringify(job));
+  assert.equal((await B.put(`/jobs/${job.id}/schedule`, { scheduledAt: Date.now() })).status, 404);
+  assert.equal((await B.post(`/jobs/${job.id}/stop`)).status, 404);
+  assert.equal((await A.get(`/jobs/${job.id}`)).body.scheduled_at, at);
+  await A.post(`/jobs/${job.id}/stop`);
 });

@@ -37,6 +37,10 @@ function setMemberships(db, accountId, projectIds, user) {
     }
   })();
 }
+// The site can be public, so a user's password must not be guessable in a few tries.
+const MIN_PASSWORD = 8;
+const weakPassword = (password) => String(password).length < MIN_PASSWORD;
+
 function projectIdsOf(db, accountId) {
   return db.prepare('SELECT project_id FROM project_members WHERE account_id = ?').all(accountId).map(r => r.project_id);
 }
@@ -87,6 +91,7 @@ router.get('/', requirePermission('accounts.view'), (req, res) => {
 router.post('/', requirePermission('accounts.manage'), (req, res) => {
   const { username, password, display_name, permissions, projectIds } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  if (weakPassword(password)) return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters` });
 
   const db = getDB();
   const exists = db.prepare('SELECT id FROM accounts WHERE username = ?').get(username);
@@ -113,6 +118,7 @@ router.put('/:id', requirePermission('accounts.manage'), (req, res) => {
   const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
   if (!account) return res.status(404).json({ error: 'Account not found' });
   if (!canManage(req.user, account)) return res.status(403).json({ error: 'Cannot edit this account' });
+  if (password && weakPassword(password)) return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters` });
 
   if (password) {
     const hash = bcrypt.hashSync(password, 10);
@@ -146,6 +152,7 @@ router.delete('/:id', requirePermission('accounts.manage'), (req, res) => {
   if (!canManage(req.user, account)) return res.status(403).json({ error: 'Cannot delete this account' });
 
   db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+  db.prepare('DELETE FROM api_tokens WHERE account_id = ?').run(id);
   logAudit('account_deleted', 'account', id, account.username, { by: req.user.id });
   res.json({ ok: true });
 });
@@ -154,6 +161,7 @@ router.post('/:id/change-password', (req, res) => {
   const { id } = req.params;
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: 'Password required' });
+  if (weakPassword(password)) return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters` });
 
   const db = getDB();
   const target = db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);

@@ -11,7 +11,7 @@ import tagsRouter from './routes/tags.js';
 import templatesRouter from './routes/templates.js';
 import jobsRouter, { resumeAllProjectJobs } from './routes/jobs.js';
 import settingsRouter from './routes/settings.js';
-import authRouter, { authMiddleware, requirePermission, getUserFromToken, parseCookies } from './routes/auth.js';
+import authRouter, { authMiddleware, requirePermission, getUserFromToken, getUserById, parseCookies } from './routes/auth.js';
 import accountsRouter from './routes/accounts.js';
 import clientsRouter from './routes/clients.js';
 import emailCampaignsRouter from './routes/emailCampaigns.js';
@@ -22,10 +22,16 @@ import pipelinesRouter from './routes/pipelines.js';
 import dealsRouter from './routes/deals.js';
 import customFieldsRouter from './routes/customFields.js';
 import { searchRouter, viewsRouter } from './routes/search.js';
+import apiTokensRouter from './routes/apiTokens.js';
+import mcpRouter from './mcp.js';
+import setupRouter from './routes/setup.js';
+import inboxRouter from './routes/inbox.js';
+import { initWaInbox, onInboxChange } from './lib/waInbox.js';
+import { initWaGuard, setAutoConnect, autoConnectProjects } from './lib/waGuard.js';
 import { resolveProject, canAccessProject } from './middleware/project.js';
 import { adoptLegacyJobs, resumePendingJobs } from './gmaps/jobs.js';
 import { startWorker, stopWorker } from './worker/index.js';
-import { initClient, getStatus, onStatusChange, destroyClient, destroyAllClients, logoutClient, migrateLegacyAuth } from './whatsapp.js';
+import { initClient, getStatus, onStatusChange, destroyClient, destroyAllClients, logoutClient, migrateLegacyAuth, hasSession } from './whatsapp.js';
 
 import os from 'os';
 
@@ -42,13 +48,26 @@ const shutdown = async () => {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
+initWaGuard();
+initWaInbox();
+
 const app = express();
 const server = http.createServer(app);
-const io = new SocketIOServer(server, { cors: { origin: true, credentials: true } });
+// Browsers may only call the API from LeadDesk's own origin, plus any listed in CORS_ORIGINS (comma separated).
+// A Vite dev server on localhost is allowed outside production.
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const originAllowed = (origin) => CORS_ORIGINS.includes(origin) || (process.env.NODE_ENV !== 'production' && LOCAL_ORIGIN.test(origin));
+const io = new SocketIOServer(server, { cors: { origin: (origin, cb) => cb(null, !origin || originAllowed(origin)), credentials: true } });
 const PORT = parseInt(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors((req, cb) => {
+  const origin = req.headers.origin;
+  let sameHost = false;
+  try { sameHost = !!origin && new URL(origin).host === req.headers.host; } catch {}
+  cb(null, { origin: sameHost || (!!origin && originAllowed(origin)), credentials: true });
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
   req.cookies = parseCookies(req.headers.cookie);
@@ -56,6 +75,8 @@ app.use((req, res, next) => {
 });
 
 // ── Auth routes (no project scope) ──────────────────────────────
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.use('/api/setup', setupRouter);
 app.use('/api/auth', authRouter);
 
 // ── Project management (auth only, no project scope) ────────────
@@ -63,6 +84,10 @@ app.use('/api/projects', authMiddleware, projectsRouter);
 
 // ── Accounts (global, auth only) ────────────────────────────────
 app.use('/api/accounts', authMiddleware, accountsRouter);
+
+// ── Personal access tokens + MCP endpoint (token auth, see mcp.js) ──
+app.use('/api/tokens', authMiddleware, apiTokensRouter);
+app.use('/mcp', mcpRouter);
 
 // ── Global auth for everything else ─────────────────────────────
 app.use('/api', authMiddleware);
@@ -86,6 +111,7 @@ app.use('/api/settings', resolveProject, settingsRouter);
 app.use('/api/clients', resolveProject, clientsRouter);
 app.use('/api/email-campaigns', resolveProject, emailCampaignsRouter);
 app.use('/api/gmaps', resolveProject, gmapsRouter);
+app.use('/api/inbox', resolveProject, inboxRouter);
 
 // ── Project-scoped inline routes ────────────────────────────────
 app.get('/api/stats', resolveProject, requirePermission('dashboard.view', 'leads.view'), (req, res) => {
@@ -162,7 +188,18 @@ app.get('/api/stats', resolveProject, requirePermission('dashboard.view', 'leads
     SELECT * FROM audit_log WHERE project_id = ? ORDER BY created_at DESC LIMIT 20
   `).all(pid);
 
+  const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const outreach = {
+    ...db.prepare(`SELECT COUNT(DISTINCT COALESCE(job_lead_id, id)) AS sent,
+      COUNT(DISTINCT CASE WHEN delivered_at IS NOT NULL THEN COALESCE(job_lead_id, id) END) AS delivered,
+      COUNT(DISTINCT CASE WHEN replied_at IS NOT NULL THEN phone END) AS replied
+      FROM wa_sends WHERE project_id = ? AND legacy = 0 AND sent_at > ?`).get(pid, since),
+    running: db.prepare("SELECT COUNT(*) AS n FROM broadcast_jobs WHERE project_id = ? AND status IN ('running', 'pending')").get(pid).n,
+    scheduled: db.prepare("SELECT COUNT(*) AS n FROM broadcast_jobs WHERE project_id = ? AND status = 'scheduled'").get(pid).n,
+  };
+
   res.json({
+    outreach,
     total, verified, unverified, dead, invalidPhone, inCampaign,
     readyForOutreach, verifiedNoTags, verifiedNoTagsNoCampaign,
     totalClients, activeClients, totalCampaigns, activeJobs,
@@ -272,9 +309,25 @@ function phoneCsv(v) {
 }
 
 // ── Socket.IO — WhatsApp events (per-project rooms) ─────────────
-const waStatusUnsubscribe = onStatusChange((projectId, status, qr) => {
-  io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
-});
+// WhatsApp status (it can carry the QR code that links a phone) only goes to people allowed to see it right now:
+// sockets keep their room when someone loses access, so every send re-checks against the database.
+const canSeeWhatsApp = (accountId, projectId) => {
+  const user = getUserById(accountId);
+  return !!user && !!canAccessProject(user, projectId) && (user.role === 'admin' || ['whatsapp.view', 'whatsapp.control'].some(p => user.permissions.includes(p)));
+};
+
+async function emitToWhatsAppViewers(projectId, event, payload) {
+  const room = 'project:' + projectId;
+  for (const s of await io.in(room).fetchSockets()) {
+    if (canSeeWhatsApp(s.data.user.id, projectId)) s.emit(event, payload);
+    else s.leave(room);
+  }
+}
+const emitWaStatus = (projectId) => emitToWhatsAppViewers(projectId, 'wa_status', { projectId, ...getStatus(projectId) });
+
+const waStatusUnsubscribe = onStatusChange((projectId) => { emitWaStatus(projectId).catch(() => {}); });
+// Only says which chat changed; message text is fetched over the API, which checks permissions
+onInboxChange((projectId, chatId) => { emitToWhatsAppViewers(projectId, 'wa_inbox', { projectId, chatId }).catch(() => {}); });
 
 // Sockets use the same session cookie as HTTP; every event re-checks project access.
 io.use((socket, next) => {
@@ -285,15 +338,17 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  const allowed = (projectId) => !!canAccessProject(socket.data.user, projectId);
+  // Read the account on every event: a permission removed while connected must stop working at once
+  const me = () => getUserById(socket.data.user.id);
+  const allowed = (projectId) => !!canAccessProject(me(), projectId);
   const canControl = () => {
-    const u = socket.data.user;
-    return u.role === 'admin' || u.permissions.includes('whatsapp.control');
+    const u = me();
+    return !!u && (u.role === 'admin' || u.permissions.includes('whatsapp.control'));
   };
 
   // Client joins a project room to receive its WA status
   socket.on('join_project', (projectId) => {
-    if (!allowed(projectId)) return;
+    if (!canSeeWhatsApp(socket.data.user.id, projectId)) return;
     socket.join('project:' + projectId);
     socket.emit('wa_status', { projectId, ...getStatus(projectId) });
   });
@@ -306,19 +361,20 @@ io.on('connection', (socket) => {
   socket.on('wa_init', async ({ projectId } = {}) => {
     if (!allowed(projectId) || !canControl()) return;
     await initClient(projectId).catch(err => console.error('[wa] init failed:', err.message));
-    io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
+    await emitWaStatus(projectId);
   });
 
   socket.on('wa_disconnect', async ({ projectId } = {}) => {
     if (!allowed(projectId) || !canControl()) return;
+    setAutoConnect(projectId, false);
     await destroyClient(projectId);
-    io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
+    await emitWaStatus(projectId);
   });
 
   socket.on('wa_logout', async ({ projectId } = {}) => {
     if (!allowed(projectId) || !canControl()) return;
     await logoutClient(projectId);
-    io.to('project:' + projectId).emit('wa_status', { projectId, ...getStatus(projectId) });
+    await emitWaStatus(projectId);
   });
 });
 
@@ -344,6 +400,10 @@ if (fs.existsSync(publicPath)) {
     }
   });
 }
+
+// Opens the database and runs migrations. A failed migration must stop the server here: the boot code below swallows
+// errors, which would leave a site that looks up but fails on every request.
+getDB();
 
 server.listen(PORT, HOST, () => {
   const ifaces = os.networkInterfaces();
@@ -378,6 +438,12 @@ server.listen(PORT, HOST, () => {
 
   // Resume any pending broadcast jobs (per project, lazily)
   setTimeout(() => {
+    // Reconnect first: scheduled broadcasts would otherwise wait for someone to press Connect after a reboot
+    try {
+      for (const projectId of autoConnectProjects()) {
+        if (hasSession(projectId)) initClient(projectId).catch(err => console.error(`[wa:${projectId}] Reconnect failed: ${err.message}`));
+      }
+    } catch (err) { console.error('[wa] Auto-connect failed:', err.message); }
     try { resumeAllProjectJobs(); } catch {}
     resumePendingJobs().catch(() => {});
   }, 3000);

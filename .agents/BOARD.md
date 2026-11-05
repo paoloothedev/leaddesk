@@ -32,6 +32,65 @@ _(none)_
 
 ## DONE
 
+### T-040 · WhatsApp inbox: chats inside LeadDesk, every message recorded
+- Status: DONE
+- Owner: lead-claude
+- Role: integrations
+- Priority: P1
+- Files: server/migrations/017-wa-inbox.js, server/lib/waInbox.js, server/routes/inbox.js, server/whatsapp.js, server/lib/waGuard.js, server/routes/jobs.js, server/lib/backup.js, server/lib/merge.js, server/lib/scope.js, server/routes/projects.js, server/index.js, server/mcp.js, server/test/{wa-inbox,inbox-api}.test.js, client/src/components/{Inbox,Sidebar,ContactPage,Tour}.jsx, App.jsx, api.js
+- Updated: 2026-11-05
+- Notes: Not recorded: groups, status, channels. Sending files from the inbox isn't built (receiving is). Verified with hand-made Baileys messages and a stub transport; no real message was sent by an agent.
+
+### T-039 · Team roles, Docker install, setup wizard, tour
+- Status: DONE
+- Owner: lead-claude
+- Role: lead
+- Priority: P1
+- Files: Dockerfile, docker-compose.yml, .dockerignore, .env.example, .github/workflows/*, README.md, AGENTS.md, server/routes/setup.js, server/routes/auth.js, server/routes/accounts.js, server/db.js, server/index.js, server/mcp.js, server/test/*, client/src/roles.js, components/{SetupWizard,Tour,Accounts,Sidebar,ProjectPicker,Tags,Stages,MessageTemplates,WhatsAppPage,Campaigns,CampaignPage,ContactPage}.jsx, App.jsx, api.js
+- Updated: 2026-11-05
+- Notes: The Docker image has NOT been built yet: this user has no access to the Docker daemon. Fresh install verified with the image's env, without Docker.
+
+### T-038 · Make the product hang together: campaigns & broadcast pages, WhatsApp number identity, security, scraper direct import
+- Status: DONE
+- Owner: lead-claude
+- Role: lead
+- Priority: P0
+- Files: server/migrations/015-*.js, migrations/index.js, server/lib/waGuard.js, server/whatsapp.js, server/routes/{jobs,campaigns,gmaps,auth,leads}.js, server/gmaps/*, server/index.js, server/mcp.js, server/test/*, client/src/App.jsx, api.js, components/{Campaigns,CampaignPage,BroadcastPage,BroadcastJobs,WhatsAppSend,WhatsAppPage,WaSafety,ContactPage,LeadsTable,GoogleMapsScraper,Dashboard}.jsx, README.md
+- Updated: 2026-11-05
+- Notes: User reviewed the audit report and asked to fix it so the app is linked and usable, plus a direct import from the scraper to contacts.
+  → Done: see LOG 2026-11-05.
+
+### T-037 · Scheduled WhatsApp messages (broadcast at a date/time, per-contact scheduled message)
+- Status: DONE
+- Owner: lead-claude
+- Role: integrations
+- Priority: P1
+- Files: server/migrations/014-scheduled-broadcasts.js, migrations/index.js, server/routes/jobs.js, server/mcp.js, server/test/broadcast-limit.test.js, client/src/api.js, WhatsAppSend.jsx, BroadcastJobs.jsx, ContactPage.jsx (+ T-036 UI leftovers: WaSafety.jsx, Settings.jsx, LeadModal.jsx)
+- Updated: 2026-10-29
+- Notes: User asked "add رسائل مجدولة". Jobs get scheduled_at + status 'scheduled'; runner starts them when due, then the anti-ban gate applies as usual.
+  → Done: migration 014, scheduled status + timer, PUT /:id/schedule, send dialog Send now/Schedule, contact-page Schedule button, Broadcasts list Start now/Cancel.
+
+### T-036 · WhatsApp anti-ban engine (limits, warm-up, health score, content rules)
+- Status: DONE
+- Owner: lead-claude
+- Role: integrations
+- Priority: P0
+- Files: server/migrations/013-wa-antiban.js, migrations/index.js, server/lib/waRules.js, server/lib/waGuard.js, server/whatsapp.js, server/routes/jobs.js, routes/leads.js, routes/projects.js, lib/backup.js, server/mcp.js, server/test/wa-*.test.js, broadcast-limit.test.js, isolation.test.js, client/src/api.js, WhatsAppSend.jsx, BroadcastJobs.jsx, WaSafety.jsx, Settings.jsx, LeadModal.jsx, ContactPage.jsx
+- Updated: 2026-10-28
+- Notes: User spec (pasted 2026-10-28): per-number limits (new chats/day, msgs/hour/min, gaussian 45–180 s, typing 30–50 ms/char, 9–21 recipient-local window, no Friday mornings, 1 touch/contact/day, max 3 identical texts), warm-up schedule, 0–100 health score with auto-pause at 85+, content rules (no links/prices in first msg, ends with question, opt-out line, ≥ variation), onWhatsApp check, dedupe, health dashboard + ETA. One number per workspace → no rotation; SQLite instead of Redis.
+  → Done incl. UI (WaSafety panel, review step in send dialog, DNC toggle/badge). See LOG 2026-10-29.
+
+### T-035 · Per-contact message draft + MCP server for Claude
+- Status: DONE
+- Owner: lead-claude
+- Role: backend
+- Priority: P1
+- Files: server/migrations/012-*.js, migrations/index.js, routes/leads.js, lib/merge.js, lib/backup.js, server/mcp.js, server/routes/apiTokens.js, server/index.js, server/test/mcp.test.js, isolation.test.js, client/src/api.js, LeadModal.jsx, ContactPage.jsx, LeadsTable.jsx, Settings.jsx
+- Updated: 2026-10-27
+- Notes: User request: a "message" field per contact (copy button), and an MCP endpoint so Claude can read contacts and write a tailored message for each. Auth = personal access tokens (hashed) created in Settings; token in URL path so claude.ai custom connectors work.
+  → Done: migration 012 (leads.message, api_tokens), Bearer token auth in authMiddleware, /api/tokens, /mcp (server/mcp.js, 16 tools incl. Maps scrape + generic api_request), Settings → Claude (MCP), Message panel on contact page + copy in table + field in modal.
+
+
 ### T-019 · Hide row-level actions the user lacks permission for
 - Status: DONE
 - Owner: lead-claude
