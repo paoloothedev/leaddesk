@@ -31,6 +31,7 @@ broadcasts: GET /jobs · GET /jobs/:id · POST /jobs/:id/pause|resume|stop · PO
 whatsapp inbox: GET /inbox/chats (filter=open|unread|mine|unassigned|done|all, q) · GET /inbox/chats/:id/messages (before, limit) · PATCH /inbox/chats/:id {assigned_to, status: open|done} · POST /inbox/chats/:id/messages {text} (SENDS A REAL WHATSAPP MESSAGE — use send_chat_message) · POST /inbox/chats/:id/contact
 whatsapp safety: GET /jobs/numbers (every number linked here) · GET /jobs/health (health score, warm-up, today's counts, reply/delivery rate) · GET/PUT /jobs/limits {limits} · PUT /jobs/health/warmup {days_ago}
 google maps: POST /gmaps/scrape {queries, autoImport, checkWhatsApp} · GET /gmaps/jobs · GET/DELETE /gmaps/jobs/:id · POST /gmaps/jobs/:id/import
+files: GET /files · POST /files/upload (multipart) · POST /files/from-base64 {name, mime_type, content_base64} · DELETE /files/:id · POST /files/:id/send {contact_id?, phone?, caption?}
 other: GET /stats · GET /search?q= · GET /settings · PUT /settings {key, value} · GET /audit-log · GET /import-logs · GET /projects (no workspace_id)`;
 
 const GUIDE = `How LeadDesk works
@@ -419,6 +420,28 @@ never tag business types or countries (use category). Call get_guide before your
     const [l, health] = await Promise.all([api('GET', '/jobs/limits', { workspace }), api('GET', '/jobs/health', { workspace })]);
     return { ...l, health };
   });
+
+  // ── File library ──────────────────────────────────────────────────────────
+  tool('list_files', 'List files in the workspace file library (CVs, price lists, portfolios, etc.)', {
+    workspace_id: ws,
+  }, ({ workspace_id }) => api('GET', '/files', { workspace: workspace_id }));
+
+  tool('upload_file', 'Upload a file (PDF, image, etc.) to the workspace file library using base64-encoded content. After reading the file content, encode it as base64 and pass it here.', {
+    workspace_id: ws,
+    name: z.string().min(1).describe('Display name, e.g. "CV - Youssef.pdf"'),
+    mime_type: z.string().optional().describe('MIME type, e.g. application/pdf or image/jpeg. Defaults to application/octet-stream.'),
+    content_base64: z.string().describe('Base64-encoded file content'),
+  }, ({ workspace_id, name, mime_type, content_base64 }) =>
+    api('POST', '/files/from-base64', { workspace: workspace_id, body: { name, mime_type, content_base64 } }));
+
+  tool('send_file', 'Send a file from the workspace library as a WhatsApp message to a contact. Only call when the user explicitly asked to send this file.', {
+    workspace_id: ws,
+    file_id: z.string().describe('ID from list_files'),
+    contact_id: z.string().optional().describe('Contact/lead ID (preferred)'),
+    phone: z.string().optional().describe('Phone number (if no contact_id)'),
+    caption: z.string().optional().describe('Optional caption under the file'),
+  }, ({ workspace_id, file_id, contact_id, phone, caption }) =>
+    api('POST', `/files/${file_id}/send`, { workspace: workspace_id, body: { contact_id, phone, caption } }));
 
   tool('api_request', `Call any LeadDesk API endpoint as this user, for everything the other tools don't cover.\n${API_MAP}`, {
     method: z.enum(['GET', 'POST', 'PUT', 'DELETE']),
