@@ -354,7 +354,7 @@ export async function downloadGmapsCSV(id) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = res.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[1] || 'gmaps-results.csv';
+  a.download = res.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[ 1] || 'gmaps-results.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -495,4 +495,23 @@ export function createApiToken(name) {
 }
 export function deleteApiToken(id) {
   return request('/tokens/' + id, { method: 'DELETE' });
+}
+
+// ── File library ────────────────────────────────────────────────
+export function getFiles() {
+  return request('/files');
+}
+export function uploadFile(file, name) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name) formData.append('name', name);
+  const headers = {};
+  if (currentProjectId) headers['X-Project-Id'] = currentProjectId;
+  return fetch(API + '/files/upload', { method: 'POST', credentials: 'include', headers, body: formData }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.error || 'Upload failed'); return d; }));
+}
+export function deleteFile(id) {
+  return request('/files/' + id, { method: 'DELETE' });
+}
+export function sendFile(fileId, contactId, caption) {
+  return request('/files/' + fileId + '/send', { method: 'POST', body: JSON.stringify({ contact_id: contactId, caption }) });
 }

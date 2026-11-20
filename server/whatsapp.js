@@ -390,6 +390,31 @@ export async function sendChatText(projectId, address, text) {
   return sent;
 }
 
+// Send a file (PDF, image, etc.) as a WhatsApp document or image message.
+export async function sendFileMessage(projectId, phone, buffer, mimeType, fileName, caption = '') {
+  const s = getClientState(projectId);
+  if (!s.sock || !s.sockReady) throw new Error('WhatsApp not connected');
+  if (s.status === 'restricted') throw new Error('Account restricted: ' + (s.restrictionReason || 'Linked device restricted by WhatsApp'));
+  const cleaned = phone.replace(/\D/g, '');
+  const jid = cleaned + '@s.whatsapp.net';
+
+  await sleep(2000 + Math.random() * 2000);
+  try { await s.sock.sendPresenceUpdate('available'); } catch {}
+  await sleep(500 + Math.random() * 1000);
+
+  const isImage = mimeType.startsWith('image/');
+  const content = isImage
+    ? { image: buffer, mimetype: mimeType, caption: caption || undefined }
+    : { document: buffer, mimetype: mimeType, fileName, caption: caption || undefined };
+
+  const sentMsg = await s.sock.sendMessage(jid, content);
+
+  try { await s.sock.sendPresenceUpdate('unavailable'); } catch {}
+  await sleep(1000 + Math.random() * 1500);
+
+  return sentMsg;
+}
+
 export async function downloadMedia(projectId, msg) {
   const s = getClientState(projectId);
   return downloadMediaMessage(msg, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: s.sock?.updateMediaMessage });
