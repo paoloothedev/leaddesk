@@ -26,6 +26,7 @@ import apiTokensRouter from './routes/apiTokens.js';
 import mcpRouter from './mcp.js';
 import setupRouter from './routes/setup.js';
 import inboxRouter from './routes/inbox.js';
+import filesRouter from './routes/files.js';
 import { initWaInbox, onInboxChange } from './lib/waInbox.js';
 import { initWaGuard, setAutoConnect, autoConnectProjects } from './lib/waGuard.js';
 import { resolveProject, canAccessProject } from './middleware/project.js';
@@ -112,6 +113,7 @@ app.use('/api/clients', resolveProject, clientsRouter);
 app.use('/api/email-campaigns', resolveProject, emailCampaignsRouter);
 app.use('/api/gmaps', resolveProject, gmapsRouter);
 app.use('/api/inbox', resolveProject, inboxRouter);
+app.use('/api/files', resolveProject, filesRouter);
 
 // ── Project-scoped inline routes ────────────────────────────────
 app.get('/api/stats', resolveProject, requirePermission('dashboard.view', 'leads.view'), (req, res) => {
@@ -291,7 +293,7 @@ app.get('/api/export/csv', resolveProject, requirePermission('leads.view'), (req
   });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="leaddesk-export-${new Date().toISOString().slice(0, 10)}.csv"`);
-  res.send('\uFEFF' + header + '\n' + rows.join('\n'));
+  res.send('﻿' + header + '\n' + rows.join('\n'));
 });
 
 function csvEscape(v) {

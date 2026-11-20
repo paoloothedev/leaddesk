@@ -129,6 +129,7 @@ router.delete('/:id', requirePermission('projects.manage'), (req, res) => {
     db.prepare('DELETE FROM custom_fields WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM saved_views WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM duplicate_dismissals WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM files WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM projects WHERE id = ?').run(id);
   });
 

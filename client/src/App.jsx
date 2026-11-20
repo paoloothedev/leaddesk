@@ -24,6 +24,7 @@ import CompanyPage from './components/CompanyPage'
 import GlobalSearch from './components/GlobalSearch'
 import Duplicates from './components/Duplicates'
 import Inbox from './components/Inbox'
+import FileLibrary from './components/FileLibrary'
 import { setCurrentUser, can } from './permissions'
 import { getStats, getStages, getTags, getCampaigns, getSettings, getProjects, setCurrentProjectId, getSetupStatus, getInboxUnread } from './api'
 import SetupWizard from './components/SetupWizard'
@@ -35,7 +36,7 @@ const pageVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 }
 
-const VIEWS = ['dashboard', 'inbox', 'leads', 'deals', 'companies', 'contact', 'company', 'duplicates', 'scraper', 'campaigns', 'broadcast', 'dead', 'settings', 'import']
+const VIEWS = ['dashboard', 'inbox', 'leads', 'deals', 'companies', 'contact', 'company', 'duplicates', 'scraper', 'campaigns', 'broadcast', 'dead', 'files', 'settings', 'import']
 // Record pages highlight their list in the sidebar
 const NAV_PARENT = { contact: 'leads', company: 'companies', duplicates: 'leads', broadcast: 'campaigns' }
 
@@ -328,6 +329,8 @@ function ProjectShell({ user, onLogout, darkMode, toggleDarkMode }) {
         return <BroadcastPage id={recordId} showToast={showToast} goView={goView} />
       case 'settings':
         return <Settings user={user} stages={stages} loadStages={loadStages} tags={tags} loadTags={loadTags} refreshId={refreshId} showToast={showToast} refresh={refresh} />
+      case 'files':
+        return <FileLibrary showToast={showToast} user={user} />
       case 'import':
         return <Import showToast={showToast} refresh={refresh} goView={goView} />
       default:

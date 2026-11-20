@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   ChartLine, Users, Skull, Megaphone, GearSix, Upload,
-  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo, SquaresFour, Handshake, Buildings, Compass, ChatCircleText } from '@phosphor-icons/react'
+  SidebarSimple, SunDim, MoonStars, DotsThree, SignOut, UserCircle, EnvelopeSimple, MagnifyingGlass, GithubLogo, SquaresFour, Handshake, Buildings, Compass, ChatCircleText, PaperclipHorizontal } from '@phosphor-icons/react'
 import { can } from '../permissions'
 
 const NAV_ITEMS = [
@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { id: 'scraper', label: 'Maps Scraper', icon: MagnifyingGlass, perms: ['leads.import'] },
   { id: 'campaigns', label: 'Campaigns', icon: Megaphone, perms: ['campaigns.view'] },
   { id: 'dead', label: 'Dead List', icon: Skull, perms: ['leads.view'] },
+  { id: 'files', label: 'Files', icon: PaperclipHorizontal, perms: ['leads.view'] },
   { id: 'settings', label: 'Settings', icon: GearSix, perms: [] },
   { id: 'import', label: 'Import', icon: Upload, perms: ['leads.import'] },
 ]
