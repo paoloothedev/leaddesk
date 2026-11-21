@@ -7,6 +7,7 @@ import { formatDate } from '../format'
 import { can, canI } from '../permissions'
 import DealModal from './DealModal'
 import WhatsAppSend from './WhatsAppSend'
+import MeetingsPanel from './Meetings'
 import { BackLink, Panel, FieldRow, CustomFieldRows, ExternalLink, DealList } from './RecordParts'
 
 const btn = 'inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors'
@@ -122,6 +123,7 @@ export default function ContactPage({ id, user, stages, refreshId, showToast, go
             )}>
             <DealList deals={c.deals} stageName={stageName} onOpen={(dealId) => setDealModal({ dealId })} />
           </Panel>
+          <MeetingsPanel contact={c} showToast={showToast} />
           <WhatsAppHistory history={c.whatsapp} goView={goView} />
           <Panel title="Campaigns">
             {c.campaigns?.length

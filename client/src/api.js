@@ -515,3 +515,20 @@ export function deleteFile(id) {
 export function sendFile(fileId, contactId, caption) {
   return request('/files/' + fileId + '/send', { method: 'POST', body: JSON.stringify({ contact_id: contactId, caption }) });
 }
+
+// ── Meetings ────────────────────────────────────────────────────
+export function getMeetings(contactId) {
+  return request('/meetings' + (contactId ? '?contact_id=' + encodeURIComponent(contactId) : ''));
+}
+export function startMeeting(contactId, title) {
+  return request('/meetings', { method: 'POST', body: JSON.stringify({ contact_id: contactId, title: title || '' }) });
+}
+export function endMeeting(id) {
+  return request('/meetings/' + id, { method: 'PUT', body: JSON.stringify({ status: 'ended' }) });
+}
+export function saveMeetingNotes(id, notes) {
+  return request('/meetings/' + id, { method: 'PUT', body: JSON.stringify({ notes, status: 'summarized' }) });
+}
+export function deleteMeeting(id) {
+  return request('/meetings/' + id, { method: 'DELETE' });
+}

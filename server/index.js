@@ -27,6 +27,7 @@ import mcpRouter from './mcp.js';
 import setupRouter from './routes/setup.js';
 import inboxRouter from './routes/inbox.js';
 import filesRouter from './routes/files.js';
+import meetingsRouter from './routes/meetings.js';
 import { initWaInbox, onInboxChange } from './lib/waInbox.js';
 import { initWaGuard, setAutoConnect, autoConnectProjects } from './lib/waGuard.js';
 import { resolveProject, canAccessProject } from './middleware/project.js';
@@ -114,6 +115,7 @@ app.use('/api/email-campaigns', resolveProject, emailCampaignsRouter);
 app.use('/api/gmaps', resolveProject, gmapsRouter);
 app.use('/api/inbox', resolveProject, inboxRouter);
 app.use('/api/files', resolveProject, filesRouter);
+app.use('/api/meetings', resolveProject, meetingsRouter);
 
 // ── Project-scoped inline routes ────────────────────────────────
 app.get('/api/stats', resolveProject, requirePermission('dashboard.view', 'leads.view'), (req, res) => {

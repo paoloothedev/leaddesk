@@ -19,8 +19,9 @@ import * as m015 from './015-wa-numbers-campaign-links.js';
 import * as m016 from './016-lead-category.js';
 import * as m017 from './017-wa-inbox.js';
 import * as m018 from './018-files.js';
+import * as m019 from './019-meetings.js';
 
-export const MIGRATIONS = [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018];
+export const MIGRATIONS = [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019];
 
 export function runMigrations(db) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)');
